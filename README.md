@@ -7,7 +7,9 @@ built-in Windows feature that actually does it.
 Windows Start search is lexical: it matches substrings of names. If you don't already know what a
 tool is called, you can't find it. SemanticStart builds a local semantic index of your installed
 applications **and** built-in Windows features, then serves it from a Start-like overlay. All
-inference runs locally; no query ever leaves the machine.
+inference runs locally; no query ever leaves the machine. The index [keeps itself
+current](#staying-current) in the background — a program installed five minutes ago is already
+findable, and one you uninstalled has already stopped ranking.
 
 ![The overlay answering "diagnose slow process" with Process Explorer details open](docs/overlay-diagnose.png)
 
