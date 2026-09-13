@@ -165,6 +165,24 @@ public sealed record RankingOptions
     public double MinCorroboratedEvidenceProduct { get; init; } = 0.18;
 
     /// <summary>
+    /// The same product of leader ratios, at the strength required to clear the weak-tail guard
+    /// (<see cref="MinRelativeScoreWithoutIndependentEvidence"/>) rather than merely to be
+    /// admitted after it. Higher than <see cref="MinCorroboratedEvidenceProduct"/> on purpose:
+    /// that bar says "the arms agree well enough to stand in for either one's own floor", this one
+    /// says "they agree well enough that being far from the leader does not matter", which is the
+    /// stronger claim.
+    ///
+    /// The separation it has to make is real and narrow. On "virtual memory usage" Task Manager
+    /// sits at 46% of the best cosine and 86% of the best BM25 for a product of 0.39, and Disk2vhd
+    /// - the entity that query exists to exclude, holding "virtual" from "Virtual PC" and nothing
+    /// about memory - at 38% and 61% for 0.23. Swept at 0.20, 0.24, 0.25, 0.30, 0.35, 0.39 and
+    /// 0.40: the corpus is flat across 0.24 to 0.39 and loses a case at either end, which is those
+    /// two products and confirms the bar is doing only what it is described as doing. 0.30 is the
+    /// middle of that band.
+    /// </summary>
+    public double StrongCorroboratedEvidenceProduct { get; init; } = 0.30;
+
+    /// <summary>
     /// Vector-only hits must stay within this fraction of the best vector similarity for the query.
     /// The bar is deliberately stricter than <see cref="MinHybridVectorLeaderRatio"/>: a hit with no
     /// lexical corroboration is resting on a single signal, so it has to be close to the leader to

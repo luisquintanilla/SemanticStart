@@ -631,7 +631,55 @@ public sealed class HybridSearchEngine : ISearchEngine
         if (candidate.VectorScore is not { } vectorScore)
             return false;
 
-        if (!relativeScore)
+        // A cosine is treated as a semantic reading everywhere else in this method. For a third of
+        // the index it is not one. Those entities have no description, no task and no harvested
+        // text: ToEmbeddingText suppresses "Open Registry Editor." and "open registry editor" as
+        // restating the name, so what remains to embed *is* the name. The resulting vector cannot
+        // disagree with anything, and the model happily places "Registry Editor" at 78% of the
+        // best cosine for "edit a file" - a query the corpus forbids it from answering - because
+        // "Editor" and "edit" are the same word to it.
+        //
+        // Only multi-word queries are affected. A one-word query is a name being typed, where name
+        // similarity is the right reading and the literal-match paths above handle it anyway.
+        // Such an entity can still surface: it needs a word in common with the query, through the
+        // lexical paths above or the corroboration below. What it may not do is arrive on a
+        // similarity to its own name alone.
+        var nameOnlySemantics = queryTermCount >= 2 && candidate.HasNameOnlySemantics;
+
+        // How strongly the two arms agree, read once and used twice - see the corroboration
+        // clause below for what the product means and why it is stated as agreement rather than
+        // as a lower bar. Zero when the candidate is not a two-arm hit at all.
+        var corroboration = topVector > 0
+            && topLexical > 0
+            && candidate.VectorRanked
+            && !nameOnlySemantics
+            && vectorScore >= vectorFloor
+            && candidate.LexicalScore is { } agreeingLexical
+                ? vectorScore / topVector * (agreeingLexical / topLexical)
+                : 0;
+
+        // The weak-tail guard, and an exemption from it.
+        //
+        // The guard compares a candidate against the best score for the query, which makes it the
+        // one floor here that moves when a *different* entity gains. That is usually harmless and
+        // was harmless until the adjacency arm: on "virtual memory usage" it pays VMMap for
+        // matching the query's own phrasing and nearly doubles its score, and Task Manager - whose
+        // evidence did not change - fell from clear of this guard to 0.347 against 0.35.
+        //
+        // Removing the arm from both sides of the comparison was tried first and is wrong. The
+        // inflated leader is not an artefact; it is the arm doing its job, and the candidates it
+        // leaves behind are the ones that matched the query's words while matching none of its
+        // phrasing. Disk2vhd is the entity this whole query exists to exclude - it earns "virtual"
+        // from "Virtual PC" and has no relation to memory - and it returns the moment the leader
+        // is deflated, because its 0.021 clears 0.35 of 0.047 but not of 0.067.
+        //
+        // So the guard stays as it is and strong two-arm agreement buys a way past it instead.
+        // That separates the two on evidence rather than on a threshold: Task Manager is at 46% of
+        // the best cosine and 86% of the best BM25 for a product of 0.39, while Disk2vhd's 38% and
+        // 61% make 0.23. The bar is higher than the corroboration clause's own, because clearing
+        // a guard is a weaker claim than being admitted by it - see
+        // RankingOptions.StrongCorroboratedEvidenceProduct.
+        if (!relativeScore && corroboration < _options.StrongCorroboratedEvidenceProduct)
             return false;
 
         if (!candidate.LexicalScore.HasValue)
@@ -668,21 +716,6 @@ public sealed class HybridSearchEngine : ISearchEngine
         var relativeVector = topVector <= 0
             || vectorScore >= topVector * _options.MinHybridVectorLeaderRatio;
 
-        // A cosine is treated as a semantic reading everywhere else in this method. For a third of
-        // the index it is not one. Those entities have no description, no task and no harvested
-        // text: ToEmbeddingText suppresses "Open Registry Editor." and "open registry editor" as
-        // restating the name, so what remains to embed *is* the name. The resulting vector cannot
-        // disagree with anything, and the model happily places "Registry Editor" at 78% of the
-        // best cosine for "edit a file" - a query the corpus forbids it from answering - because
-        // "Editor" and "edit" are the same word to it.
-        //
-        // Only multi-word queries are affected. A one-word query is a name being typed, where name
-        // similarity is the right reading and the literal-match paths above handle it anyway.
-        // Such an entity can still surface: it needs a word in common with the query, through the
-        // lexical paths above or the corroboration below. What it may not do is arrive on a
-        // similarity to its own name alone.
-        var nameOnlySemantics = queryTermCount >= 2 && candidate.HasNameOnlySemantics;
-
         if (vectorScore >= vectorFloor && relativeVector && !nameOnlySemantics)
             return true;
 
@@ -716,12 +749,7 @@ public sealed class HybridSearchEngine : ISearchEngine
         // independently; letting a below-floor cosine stand in for that turns it into a second,
         // weaker version of the hybrid floor above. Measured: without this restriction "search the
         // web" buries Microsoft Edge under msoasb, Get Started, Command Palette and IIS.
-        if (topVector > 0 && topLexical > 0
-            && candidate.VectorRanked
-            && !nameOnlySemantics
-            && vectorScore >= vectorFloor
-            && vectorScore / topVector * (candidate.LexicalScore.Value / topLexical)
-                >= _options.MinCorroboratedEvidenceProduct)
+        if (corroboration >= _options.MinCorroboratedEvidenceProduct)
             return true;
 
         return false;
