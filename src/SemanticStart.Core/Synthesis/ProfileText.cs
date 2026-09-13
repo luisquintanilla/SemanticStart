@@ -214,6 +214,13 @@ internal static class ProfileText
     /// so 175 is the centre of the range that is best on both. Two hundred is a cliff rather than
     /// a slope - it loses two cases outright - which is the reason not to leave it there.
     ///
+    /// Re-swept once the caption cap upstream stopped truncating a large interface mid-vocabulary,
+    /// which changes what this budget is choosing among and therefore invalidates the numbers
+    /// above: 240, 250, 260, 275, 290 and 300 all pass 57, while 225 and below and 325 and above
+    /// pass 56, MRR flat at 0.864 across the whole range. 270 is the centre of that window. The
+    /// case that moves is "view memory usage", which had been reported missing three times and was
+    /// failing again; nothing regresses.
+    ///
     /// Overridable from the environment so it can be swept against a fixed index; a sweep needs
     /// only "index --refresh ui-resources", since this field is lexical and never embedded.
     /// </summary>
@@ -224,7 +231,7 @@ internal static class ProfileText
             System.Globalization.CultureInfo.InvariantCulture,
             out var configured) && configured > 0
             ? configured
-            : 175;
+            : 270;
 
     /// <summary>
     /// Drops the sentence-shaped runs that are actually columns of labels, keeping the prose

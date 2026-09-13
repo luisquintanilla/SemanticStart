@@ -29,8 +29,31 @@ public sealed class UiResourceEnricher : IEnricher
     /// <summary>
     /// Enough to cover a large application's menus without letting one program contribute a
     /// document that dwarfs everything else in the index.
+    ///
+    /// Spent in resource-arrival order, which is the weakness: Windows enumerates menus then
+    /// dialogs by resource id, an order that has nothing to do with how much a caption says about
+    /// the program. Process Explorer offers 424 usable captions, so at 160 everything past the
+    /// cut is invisible - including "Virtual Size" (#220), "Physical Memory Usage" (#264) and
+    /// "Virtual Memory" (#378), which is the entire reason it cannot be found by searching for
+    /// virtual memory. Only "Physical Memory History" (#35) survives, from a menu.
+    ///
+    /// Overridable from the environment for the same reason as the feature-word cap: the two
+    /// interact, since this decides which words that one gets to choose from, and neither can be
+    /// swept without the other. Swept together at 180, 200, 220, 240, 260, 300, 340, 424, 500 and
+    /// 800 against a fixed word budget: 56 cases at 180 and 57 from 200 upward, flat all the way
+    /// out, with MRR unmoved at 0.864 throughout. Raising it costs nothing measurable because the
+    /// word cap downstream, not this one, is what bounds the field's length; all this decides is
+    /// which captions that budget may draw from. 320 sits well past the point where the richest
+    /// interface in the index stops being truncated mid-vocabulary, with headroom for a larger one.
     /// </summary>
-    private const int MaxCaptions = 160;
+    private static readonly int MaxCaptions =
+        int.TryParse(
+            Environment.GetEnvironmentVariable("SEMANTICSTART_MAXCAPTIONS"),
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var configuredCaptions) && configuredCaptions > 0
+            ? configuredCaptions
+            : 320;
 
     private const int MaxCaptionLength = 48;
 

@@ -135,6 +135,15 @@ public static class RelevanceCorpus
         },
         new()
         {
+            Query = "virtual memory usage",
+            AcceptableResults = ["VMMap", "RAMMap", "RamMap", "Resource Monitor", "Task Manager", "Performance Monitor", "System Properties", "Process Explorer"],
+            RequiredResults = ["VMMap"],
+            ForbiddenResults = ["Disk2vhd"],
+            WithinTopN = 3,
+            Rationale = "Reported: Disk2vhd, a disk imaging tool, on screen for a memory query. The top of the list is right - VMMap is the virtual memory analyzer and leads - so what this case defends is the tail. Disk2vhd is there on one word. 'virtual' appears in only 14 of 583 profiles, so BM25 weights it heavily, and Disk2vhd has it legitimately, from the interface label 'Prepare for use in Virtual PC'; 'use' then stems onto 'usage' for a second term. Nothing is malfunctioning. The scoring is a bag of words, so 'Virtual PC' and 'virtual memory' are the same evidence, and adjacency - the only thing that distinguishes them - earns nothing. Only two profiles in the index contain the phrase 'virtual memory' at all, VMMap and System Properties, which is how much a phrase signal would have to work with. Fixing this properly means scoring adjacency, not retuning weights, because every weight that would demote Disk2vhd also demotes the one rare word the genuine answers are found by. Recorded before that work rather than after, so the cost of not doing it is visible. Process Explorer is deliberately only acceptable, never required: it reports virtual memory per process and its dialogs say so in as many words, but the features column is de-duplicated word by word, so no phrase survives it and it cannot be reached by an adjacency signal either.",
+        },
+        new()
+        {
             Query = "todo",
             AcceptableResults = ["Microsoft To Do", "To Do"],
             RequiredResults = ["Outlook (classic)"],

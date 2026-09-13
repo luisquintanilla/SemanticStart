@@ -24,7 +24,7 @@ On the Windows 11 machine these numbers were taken from:
 |---|---|
 | Entities indexed | 583 |
 | Query latency | 3.1 ms median, 5.0 ms p95 |
-| Relevance corpus | 56/64, MRR 0.864, correct answer first 84% of the time |
+| Relevance corpus | 57/65, MRR 0.866, correct answer first 84% of the time |
 | Full rebuild | ~7 minutes, once |
 | Background refresh | ~4.5 seconds, hourly |
 | Re-running one enricher | 2.5 seconds |
