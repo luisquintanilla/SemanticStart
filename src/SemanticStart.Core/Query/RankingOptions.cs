@@ -36,6 +36,27 @@ public sealed record RankingOptions
     public double LiteralArmWeight { get; init; } = 4.0;
 
     /// <summary>
+    /// Weight for the adjacency arm, which pays an entity for saying the query's words next to
+    /// each other rather than merely somewhere.
+    ///
+    /// Both retrieval arms are indifferent to word order. BM25 reads a bag of words, and a
+    /// sentence embedding compresses a few hundred harvested interface labels until the pairings
+    /// among them stop being recoverable. So "virtual memory usage" was answered by a disk
+    /// imager, on the strength of a label reading "Prepare for use in Virtual PC" - three of the
+    /// query's words, none of them about memory. Nothing was malfunctioning; the ranking simply
+    /// had no way to prefer the tool whose interface says "Virtual Memory" in those two words.
+    ///
+    /// Deliberately weaker than the literal-name arm. Adjacency is corroborating evidence, not an
+    /// identification: a program that names the exact phrase is a better answer than one that
+    /// scatters the words, but it is still a worse answer than the program the user named.
+    ///
+    /// Swept at 0, 0.5, 1, 1.25, 1.5, 2, 3, 4, 6 and 8. Below 1 the arm changes nothing; 1 to 1.5
+    /// is the plateau, at 59 cases and 0.871 MRR against 58 and 0.871 without it; 2 and above
+    /// start costing cases as the phrase begins to outweigh what the query is about.
+    /// </summary>
+    public double AdjacencyArmWeight { get; init; } = 1.25;
+
+    /// <summary>
     /// Cosine floor for the vector arm. Below this a hit is semantic noise; MiniLM assigns
     /// non-trivial similarity to almost any pair of strings, so an explicit floor is required.
     ///

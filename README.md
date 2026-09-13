@@ -66,10 +66,12 @@ products. The result is embedded with `all-MiniLM-L6-v2` via ONNX Runtime.
 **Querying (hot path).** Two arms run per query. The vector arm supplies semantic recall; the
 lexical FTS5/BM25 arm supplies precision on literal names. Neither is sufficient alone — pure vector
 search fails on short prefixes like `wor`, and pure lexical search cannot answer *"free up disk
-space"*. Results are fused with Reciprocal Rank Fusion, then adjusted by literal-name boosts and by
-what you actually launch. Results whose evidence is weak are dropped rather than padding the list to
-the requested count, so a query nothing answers well shows *"No good matches found"* instead of a
-page of near-misses.
+space"*. Results are fused with Reciprocal Rank Fusion, then adjusted by literal-name boosts, by an
+adjacency signal that rewards saying the query's words next to each other rather than merely
+somewhere — which is what separates *"virtual memory"* from a *"Virtual PC"* label sitting near a
+mention of memory — and by what you actually launch. Results whose evidence is weak are dropped
+rather than padding the list to the requested count, so a query nothing answers well shows *"No good
+matches found"* instead of a page of near-misses.
 
 ## Requirements
 

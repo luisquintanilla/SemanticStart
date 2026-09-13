@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -362,6 +363,72 @@ public sealed class HybridSearchEngine : ISearchEngine
             candidate.Score += candidate.LiteralContribution;
             candidate.LiteralStrength = strength;
             candidate.LiteralReason = reason;
+        }
+
+        // The adjacency arm is paid after the retrieval arms and over the candidates they found,
+        // because it settles orderings rather than discovering anything: an entity that says the
+        // query's words together will have been retrieved for saying them at all.
+        var queryPairs = AdjacentPairs(queryTerms);
+        if (queryPairs.Count > 0 && candidates.Count > 0)
+        {
+            // The cosine is needed before the arm is paid, so it is read here rather than waiting
+            // for the final pass below, which records it for the surfacing floors.
+            foreach (var candidate in candidates.Values)
+            {
+                if (!candidate.VectorScore.HasValue
+                    && candidate.Entity.VectorOrdinal is { } pending
+                    && (uint)pending < (uint)vectorEvidence.Length)
+                    candidate.VectorScore = vectorEvidence[pending];
+            }
+
+            var vectorLeader = candidates.Values.Max(c => c.VectorScore ?? 0.0);
+
+            var adjacencyHits = new List<(Candidate Candidate, double Strength)>();
+            foreach (var candidate in candidates.Values)
+            {
+                var strength = AdjacencyStrength(snapshot, candidate.Entity, queryPairs);
+                if (strength <= 0)
+                    continue;
+
+                // Adjacency corroborates; it does not identify. Paid flat, one menu label decides
+                // the ranking on its own: TCPView really does offer "Kill Process", so it took
+                // first place for "kill a process" from Taskkill and PsKill, whose whole purpose
+                // that is. The phrase was not wrong, it was outweighing a semantic arm that had
+                // rated TCPView 0.142 against a 0.637 leader. Scaling by that agreement keeps the
+                // signal where it belongs - deciding between candidates the rest of the ranking
+                // already finds plausible, rather than promoting one it does not.
+                if (vectorLeader > 0)
+                    strength *= Math.Clamp((candidate.VectorScore ?? 0.0) / vectorLeader, 0.0, 1.0);
+
+                if (strength > 0)
+                    adjacencyHits.Add((candidate, strength));
+            }
+
+            adjacencyHits.Sort((a, b) =>
+            {
+                var byStrength = b.Strength.CompareTo(a.Strength);
+                return byStrength != 0
+                    ? byStrength
+                    : string.Compare(
+                        a.Candidate.Entity.Entity.DisplayName,
+                        b.Candidate.Entity.Entity.DisplayName,
+                        StringComparison.OrdinalIgnoreCase);
+            });
+
+            // Shared ranks matter more here than in any other arm. Adjacency is nearly binary - a
+            // two-word query has one pairing, so every entity that reproduces it scores exactly
+            // alike - and ordering identical evidence by display name would hand the alphabet a
+            // full rank of credit. Measured: without tiering the arm bought the phrase query at a
+            // cost of 0.016 MRR and three points of top-1 accuracy across everything else.
+            var adjacencyRanks = TieredRanks([.. adjacencyHits.Select(h => h.Strength)]);
+
+            for (var rank = 0; rank < adjacencyHits.Count; rank++)
+            {
+                var (candidate, strength) = adjacencyHits[rank];
+                candidate.AdjacencyContribution =
+                    _options.AdjacencyArmWeight * strength / (_options.RrfK + adjacencyRanks[rank] + 1);
+                candidate.Score += candidate.AdjacencyContribution;
+            }
         }
 
         foreach (var candidate in candidates.Values)
@@ -840,6 +907,7 @@ public sealed class HybridSearchEngine : ISearchEngine
         public double VectorContribution { get; set; }
         public double LexicalContribution { get; set; }
         public double LiteralContribution { get; set; }
+        public double AdjacencyContribution { get; set; }
         public double UsageContribution { get; set; }
         public double LiteralStrength { get; set; }
         public string? LiteralReason { get; set; }
@@ -907,6 +975,7 @@ public sealed class HybridSearchEngine : ISearchEngine
             return 1.0;
 
         var haystack = BuildMatchText(entity);
+        HashSet<string>? phrased = null;
         var available = 0.0;
         var matched = 0.0;
 
@@ -914,7 +983,23 @@ public sealed class HybridSearchEngine : ISearchEngine
         {
             var weight = InverseDocumentFrequency(snapshot, term);
             available += weight;
+
             if (haystack.Contains(term, StringComparison.Ordinal))
+            {
+                matched += weight;
+                continue;
+            }
+
+            // The one way a word from the excluded columns may still count. Those columns are kept
+            // out because a single word is trivially findable among a few hundred harvested nouns,
+            // so crediting them makes coverage stop discriminating - but a word the entity uses in
+            // the query's own order is the opposite of a coincidence. Process Explorer reported 20%
+            // here, the floor value meaning nothing matched at all, while BM25 was paying it 95% of
+            // the leader for the labels "Virtual Memory" and "Physical Memory Usage"; the floors
+            // then withheld the entity the lexical arm had ranked eighth. Only words inside a
+            // matched pairing are credited, never the rest of the column.
+            phrased ??= PhrasedTerms(entity, AdjacentPairs(queryTerms));
+            if (phrased.Contains(term))
                 matched += weight;
         }
 
@@ -930,6 +1015,153 @@ public sealed class HybridSearchEngine : ISearchEngine
         var frequency = snapshot.DocumentFrequency.GetValueOrDefault(term);
         return Math.Log(1.0 + (snapshot.Entities.Length / (1.0 + frequency)));
     }
+
+    /// <summary>
+    /// The query's words taken two at a time in the order they were typed. Stopwords are already
+    /// gone, so "how do I check virtual memory usage" yields "virtual memory" and "memory usage" -
+    /// the pairings a person would recognise as the subject of the question.
+    /// </summary>
+    private static IReadOnlyList<string> AdjacentPairs(IReadOnlyList<string> queryTerms)
+    {
+        if (queryTerms.Count < 2)
+            return [];
+
+        var pairs = new List<string>(queryTerms.Count - 1);
+        for (var i = 1; i < queryTerms.Count; i++)
+            pairs.Add(queryTerms[i - 1] + " " + queryTerms[i]);
+
+        return pairs;
+    }
+
+    /// <summary>
+    /// How much of the query's phrasing an entity reproduces verbatim, as a fraction of what there
+    /// was to reproduce, weighted so that a rare pairing counts for more than a common one.
+    ///
+    /// Measured over a wider text than <see cref="BuildMatchText"/>: interface labels and harvested
+    /// prose are included here though coverage excludes them. The two are not in tension. Coverage
+    /// excludes them because a single word is trivially findable among a few hundred nouns, so
+    /// admitting them makes the measure stop discriminating. An exact adjacent pair is the opposite
+    /// kind of evidence - the reason those fields are worth reading at all is that a program's own
+    /// menu is where it names its features in the words it uses for them.
+    /// </summary>
+    private static double AdjacencyStrength(Snapshot snapshot, IndexedEntity entity, IReadOnlyList<string> pairs)
+    {
+        var segments = AdjacencySegments(entity);
+        if (segments.Count == 0)
+            return 0.0;
+
+        var available = 0.0;
+        var matched = 0.0;
+
+        foreach (var pair in pairs)
+        {
+            var space = pair.IndexOf(' ', StringComparison.Ordinal);
+            var weight = Math.Min(
+                InverseDocumentFrequency(snapshot, pair[..space]),
+                InverseDocumentFrequency(snapshot, pair[(space + 1)..]));
+
+            available += weight;
+
+            if (States(segments, pair))
+                matched += weight;
+        }
+
+        return available <= 0 ? 0.0 : matched / available;
+    }
+
+    /// <summary>
+    /// The query words an entity uses next to each other, in the query's own order.
+    /// </summary>
+    private static HashSet<string> PhrasedTerms(IndexedEntity entity, IReadOnlyList<string> pairs)
+    {
+        var terms = new HashSet<string>(StringComparer.Ordinal);
+        if (pairs.Count == 0)
+            return terms;
+
+        var segments = AdjacencySegments(entity);
+        foreach (var pair in pairs)
+        {
+            if (!States(segments, pair))
+                continue;
+
+            var space = pair.IndexOf(' ', StringComparison.Ordinal);
+            terms.Add(pair[..space]);
+            terms.Add(pair[(space + 1)..]);
+        }
+
+        return terms;
+    }
+
+    /// <summary>
+    /// Whether the entity puts these two words together, side by side and in this order.
+    ///
+    /// Both words must be complete. Letting the query's last word match as a prefix, so that the
+    /// signal would not switch off between keystrokes, was tried and measured worse at every
+    /// budget - a corpus case and 0.008 MRR - and it did not buy the stability it was for: what
+    /// reorders "list processe" against "list processes" is the cosine floors, which move with a
+    /// half-typed word whatever this arm does.
+    /// </summary>
+    private static bool States(IReadOnlyList<string> segments, string pair)
+    {
+        var padded = " " + pair + " ";
+        foreach (var segment in segments)
+        {
+            if (segment.Contains(padded, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The entity's text cut at the punctuation that separates one statement from the next, so a
+    /// pairing is only credited where the entity really put two words together. Without the cut,
+    /// the comma-joined caption list "Virtual Size, Memory Priority" would read as an entity
+    /// asserting "size memory", and adjacency would be inventing exactly the phrases it exists to
+    /// detect.
+    /// </summary>
+    private static IReadOnlyList<string> AdjacencySegments(IndexedEntity entity)
+    {
+        var segments = new List<string>();
+        Add(entity.Entity.DisplayName);
+
+        if (entity.Profile is { } profile)
+        {
+            Add(profile.Summary);
+            Add(profile.Details);
+            Add(profile.Features);
+            foreach (var task in profile.Tasks)
+                Add(task);
+            foreach (var synonym in profile.Synonyms)
+                Add(synonym);
+        }
+
+        return segments;
+
+        void Add(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
+            var builder = new StringBuilder(text.Length + 2).Append(' ');
+            foreach (var character in text)
+            {
+                if (char.IsLetterOrDigit(character))
+                    builder.Append(char.ToLowerInvariant(character));
+                else if (SentenceBreaks.Contains(character))
+                {
+                    segments.Add(builder.Append(' ').ToString());
+                    builder.Clear().Append(' ');
+                }
+                else if (builder[^1] != ' ')
+                    builder.Append(' ');
+            }
+
+            segments.Add(builder.Append(' ').ToString());
+        }
+    }
+
+    private static readonly SearchValues<char> SentenceBreaks = SearchValues.Create(",.;:!?()[]{}\"|/\\\r\n");
 
     private const double _minimumCoverageWeight = 0.2;
 

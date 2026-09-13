@@ -137,18 +137,114 @@ internal static class ProfileText
         var kept = new List<string>();
         var known = Vocabulary(displayName, summary);
 
-        foreach (var word in Regex.Split(body, @"[^\p{L}\p{N}]+"))
+        return Phrases(body, seen, kept, known);
+    }
+
+    /// <summary>
+    /// The same field with whole captions kept instead of loose words.
+    ///
+    /// Word-level reduction throws away two things that turn out to matter. Adjacency is one:
+    /// "Virtual Memory" and "Physical Memory Usage" survive only as the words virtual, physical,
+    /// memory and usage scattered among two hundred others, so nothing can tell them from a label
+    /// about Virtual PC. Term frequency is the other, and it is the larger effect - a program whose
+    /// interface names memory in twenty places asserts it exactly as loudly as one that mentions it
+    /// once, because BM25 only ever sees the one occurrence left behind.
+    ///
+    /// Repetition is still bounded, because the original reason for reducing it stands: Registry
+    /// Editor offers "Edit String", "Edit Binary Value", "Edit DWORD (32-bit) Value" and "Edit
+    /// Multi-String", and four Edits read as four times the evidence for a query the corpus
+    /// forbids it from answering. Bounding each word rather than removing its repeats keeps the
+    /// difference between mentioning a capability and being built around it, without letting one
+    /// word run away with the field.
+    /// </summary>
+    private static string? Phrases(string body, HashSet<string> seen, List<string> kept, IReadOnlyCollection<string> known)
+    {
+        var occurrences = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var pairings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var words = 0;
+
+        foreach (var caption in body.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (word.Length < 2 || !seen.Add(word) || Restates(word, known))
+            var label = caption.Trim(' ', '.');
+            if (label.Length == 0 || !seen.Add(label))
                 continue;
 
-            kept.Add(word);
-            if (kept.Count >= MaxDistinctFeatureWords)
+            var parts = Regex.Split(label, @"[^\p{L}\p{N}]+").Where(w => w.Length >= 2).ToArray();
+            if (parts.Length == 0)
+                continue;
+
+            // Admission is judged per caption and the caption is then kept whole. Filtering words
+            // out of it and rejoining what survived would manufacture adjacencies the program's
+            // interface never had - "Physical Memory Usage" minus a word budgeted out becomes the
+            // phrase "Memory Usage", which no label says - and inventing phrases is the exact
+            // failure that keeping phrases at all is meant to fix.
+            // Two ways to earn a place. Carrying a word the field does not yet have is the
+            // obvious one. The other is carrying a pairing it does not yet have, because a
+            // caption made entirely of words seen elsewhere can still be the only place the
+            // program says they belong together. Process Explorer is the case: by the time
+            // "Virtual Memory" is read, "Virtual Size" has spent virtual and "Physical Memory
+            // History" has spent memory, so a word-novelty rule refuses the one label that
+            // answers the query - and refuses it precisely because the phrase is worth keeping.
+            // Both words of a qualifying pair must be new to the entity, or every "Edit Binary
+            // Value" and "Edit DWORD Value" readmits itself on the strength of its second word
+            // and Registry Editor recovers the four Edits this bound exists to take away.
+            var novel = parts.Any(w => !Restates(w, known) && occurrences.GetValueOrDefault(w) < MaxWordRepeats);
+            var pairs = Pairings(parts, known);
+            if (!novel && !pairs.Any(p => !pairings.Contains(p)))
+                continue;
+
+            foreach (var part in parts)
+                occurrences[part] = occurrences.GetValueOrDefault(part) + 1;
+
+            foreach (var pair in pairs)
+                pairings.Add(pair);
+
+            kept.Add(label);
+            words += parts.Length;
+
+            if (words >= MaxDistinctFeatureWords)
                 break;
         }
 
-        return kept.Count == 0 ? null : "Interface labels: " + string.Join(" ", kept) + ".";
+        return kept.Count == 0 ? null : "Interface labels: " + string.Join(", ", kept) + ".";
     }
+
+    /// <summary>
+    /// The adjacent word pairs a caption asserts, limited to pairs where neither word merely
+    /// restates the entity's own name. A pair drawn from the name says nothing the name has not
+    /// already said, and admitting captions on the strength of one would let a program's title
+    /// buy back shelf space in the field meant to describe what the title omits.
+    /// </summary>
+    private static List<string> Pairings(IReadOnlyList<string> parts, IReadOnlyCollection<string> known)
+    {
+        var pairs = new List<string>();
+
+        for (var i = 1; i < parts.Count; i++)
+        {
+            if (Restates(parts[i - 1], known) || Restates(parts[i], known))
+                continue;
+
+            pairs.Add(parts[i - 1] + " " + parts[i]);
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    /// How many times one word may be counted before a caption needs some other reason to be
+    /// admitted. One, because a caption that brings nothing new should have to justify itself by
+    /// its pairings instead - swept at 1, 3 and 5 against the corpus, where 1 and 3 tie and 5 is
+    /// consistently worse. The bound gates admission, not emission: an admitted caption is kept
+    /// whole, so ordinary words still recur as often as the interface really repeats them.
+    /// </summary>
+    private static readonly int MaxWordRepeats =
+        int.TryParse(
+            Environment.GetEnvironmentVariable("SEMANTICSTART_WORDREPEATS"),
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var repeats) && repeats > 0
+            ? repeats
+            : 1;
 
     private static IReadOnlyCollection<string> Vocabulary(string? displayName, string? summary)
     {
@@ -221,6 +317,16 @@ internal static class ProfileText
     /// case that moves is "view memory usage", which had been reported missing three times and was
     /// failing again; nothing regresses.
     ///
+    /// Re-swept again when captions stopped being shredded into words, which invalidates those
+    /// numbers in turn - the budget now buys whole labels, so it is counting the words inside
+    /// phrases rather than a vocabulary. 350 through 600 are flat at 58 cases and 0.871 MRR; the
+    /// choice within that plateau is made by what the adjacency arm can then see. 500 leaves
+    /// Process Explorer holding "Physical Memory Usage" but not "Virtual Memory", which is a late
+    /// label in its resources, so it reads 64% coverage for "virtual memory usage" and the floors
+    /// withhold it; 550 admits enough to surface it; 600 and above start costing a case as the
+    /// extra text moves BM25's length normalisation for everything else. 550 is the point where
+    /// the corpus is at its best and the reported query is answered.
+    ///
     /// Overridable from the environment so it can be swept against a fixed index; a sweep needs
     /// only "index --refresh ui-resources", since this field is lexical and never embedded.
     /// </summary>
@@ -231,7 +337,7 @@ internal static class ProfileText
             System.Globalization.CultureInfo.InvariantCulture,
             out var configured) && configured > 0
             ? configured
-            : 270;
+            : 550;
 
     /// <summary>
     /// Drops the sentence-shaped runs that are actually columns of labels, keeping the prose

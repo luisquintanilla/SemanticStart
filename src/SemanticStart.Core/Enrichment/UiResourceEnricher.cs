@@ -45,6 +45,11 @@ public sealed class UiResourceEnricher : IEnricher
     /// word cap downstream, not this one, is what bounds the field's length; all this decides is
     /// which captions that budget may draw from. 320 sits well past the point where the richest
     /// interface in the index stops being truncated mid-vocabulary, with headroom for a larger one.
+    ///
+    /// Raised again to 450 once whole captions were kept, because "Virtual Memory" at #378 then
+    /// became reachable rather than merely present: it is the label that answers a reported query,
+    /// and a cap of 320 cut it. Re-swept at 320, 450 and 600 against the word budget downstream,
+    /// all flat, confirming that this cap still costs nothing and only widens the choice.
     /// </summary>
     private static readonly int MaxCaptions =
         int.TryParse(
@@ -53,7 +58,7 @@ public sealed class UiResourceEnricher : IEnricher
             System.Globalization.CultureInfo.InvariantCulture,
             out var configuredCaptions) && configuredCaptions > 0
             ? configuredCaptions
-            : 320;
+            : 450;
 
     private const int MaxCaptionLength = 48;
 
@@ -379,6 +384,12 @@ public sealed class UiResourceEnricher : IEnricher
         // and, in a resource that is entirely non-ASCII, empties it, which is the right outcome
         // for an index whose queries are English.
         raw = Regex.Replace(raw, @"^[^\x20-\x7E]+", string.Empty);
+
+        // The caption list is joined with commas, and consumers split it back apart on them, so a
+        // comma inside a caption would tear it in half and leave two fragments that the program's
+        // interface never showed. Captions are phrases, not sentences, so a comma in one is almost
+        // always separating clauses of something that reads as prose anyway; a space loses nothing.
+        raw = raw.Replace(',', ' ');
 
         // Judged before the edges are trimmed, because trimming angle brackets off a placeholder
         // leaves a word that looks like an ordinary caption.
