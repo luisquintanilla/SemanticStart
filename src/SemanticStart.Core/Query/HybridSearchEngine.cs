@@ -444,7 +444,10 @@ public sealed class HybridSearchEngine : ISearchEngine
             // different question. Candidates no lexical hit reached keep the default, which no
             // path consults because every consumer requires a BM25 score first.
             if (candidate.LexicalScore.HasValue)
+            {
                 candidate.LexicalCoverage = LexicalCoverageWeight(snapshot, candidate.Entity, queryTerms);
+                candidate.HasNameOnlyLexis = HasNameOnlyLexis(candidate.Entity, queryTerms);
+            }
 
             if (IsUnlistedCommand(candidate.Entity.Entity))
                 candidate.Score *= _options.UnlistedCommandPenalty;
@@ -648,11 +651,15 @@ public sealed class HybridSearchEngine : ISearchEngine
 
         // How strongly the two arms agree, read once and used twice - see the corroboration
         // clause below for what the product means and why it is stated as agreement rather than
-        // as a lower bar. Zero when the candidate is not a two-arm hit at all.
+        // as a lower bar. Zero when the candidate is not a two-arm hit at all, and zero when
+        // either arm's contribution is the entity's own name rather than a reading of it: the
+        // clause's whole claim is independence, and two arms restating one name are not two
+        // findings. See HasNameOnlySemantics and HasNameOnlyLexis.
         var corroboration = topVector > 0
             && topLexical > 0
             && candidate.VectorRanked
             && !nameOnlySemantics
+            && !candidate.HasNameOnlyLexis
             && vectorScore >= vectorFloor
             && candidate.LexicalScore is { } agreeingLexical
                 ? vectorScore / topVector * (agreeingLexical / topLexical)
@@ -954,6 +961,13 @@ public sealed class HybridSearchEngine : ISearchEngine
             || (profile.IndexableSummary(Entity.Entity.DisplayName) is null
                 && profile.IndexableTasks(Entity.Entity.DisplayName).Count == 0
                 && string.IsNullOrWhiteSpace(profile.Details));
+
+        /// <summary>
+        /// The lexical counterpart: true when the only query terms this candidate matches are ones
+        /// its own name contains, so the BM25 score restates the name rather than adding to it.
+        /// See <c>HasNameOnlyLexis</c> for how it is decided and what it is for.
+        /// </summary>
+        public bool HasNameOnlyLexis { get; set; }
     }
 
     /// <summary>
@@ -1032,6 +1046,79 @@ public sealed class HybridSearchEngine : ISearchEngine
         }
 
         return available <= 0 ? 1.0 : Math.Max(matched / available, _minimumCoverageWeight);
+    }
+
+    /// <summary>
+    /// Whether every query term this candidate matches is one its own name already contains, so
+    /// its BM25 score is the name restating itself rather than evidence about what it does.
+    ///
+    /// Reported for "view memory usage": DebugView above Task Manager and Resource Monitor.
+    /// Nothing had gone wrong lexically - "view" is genuinely all over it, thirteen times in its
+    /// own menus - but every one of those occurrences is the word inside its name, and it matches
+    /// neither "memory" nor "usage" anywhere that says what the program is for. It is the shape
+    /// the corroboration clause is least able to judge: that clause claims the two arms found the
+    /// same thing independently, and here they found the same name twice, the cosine being lifted
+    /// by exactly the token the BM25 score is built from.
+    ///
+    /// Two conditions, because the charge is specifically "you matched *because of* your name".
+    /// A candidate matching no query term at all is not accused: Task Manager reads no term in
+    /// these fields on "virtual memory usage" and its evidence lives in harvested labels, which is
+    /// weak but is not self-reference. And a term is only credited to the descriptive text when it
+    /// is not sitting at the tail of a longer word, which is what separates "DebugView" from the
+    /// morphology the rest of the matching is deliberately loose about - "usage" inside "usages"
+    /// counts, "view" inside "debugview" does not. Synonyms that are fragments of the name are
+    /// excluded for the same reason; synonym generation splits the display name, so DebugView
+    /// lists "view" as a synonym of itself.
+    /// </summary>
+    private static bool HasNameOnlyLexis(IndexedEntity entity, IReadOnlyList<string> queryTerms)
+    {
+        if (queryTerms.Count < 2)
+            return false;
+
+        var name = entity.Entity.DisplayName.ToLowerInvariant();
+        var inName = queryTerms.Any(t => name.Contains(t, StringComparison.Ordinal));
+        if (!inName)
+            return false;
+
+        var descriptive = new StringBuilder();
+        if (entity.Profile is { } profile)
+        {
+            descriptive.Append(' ').Append(profile.Summary.ToLowerInvariant());
+            foreach (var task in profile.Tasks)
+                descriptive.Append(' ').Append(task.ToLowerInvariant());
+            foreach (var synonym in profile.Synonyms)
+            {
+                var lowered = synonym.ToLowerInvariant();
+                if (!name.Contains(lowered, StringComparison.Ordinal))
+                    descriptive.Append(' ').Append(lowered);
+            }
+
+            if (!string.IsNullOrWhiteSpace(profile.Details))
+                descriptive.Append(' ').Append(profile.Details.ToLowerInvariant());
+        }
+
+        var text = descriptive.ToString();
+        return !queryTerms.Any(term => OccursAsWholeWordStart(text, term));
+    }
+
+    /// <summary>
+    /// Whether the term appears somewhere it begins a word, rather than only finishing a longer
+    /// one. Suffixes are allowed through because the matching elsewhere is deliberately tolerant
+    /// of morphology; prefixes are not, because a term buried at the end of a word is a compound
+    /// that happens to contain it.
+    /// </summary>
+    private static bool OccursAsWholeWordStart(string text, string term)
+    {
+        var at = text.IndexOf(term, StringComparison.Ordinal);
+        while (at >= 0)
+        {
+            if (at == 0 || !char.IsLetter(text[at - 1]))
+                return true;
+
+            at = text.IndexOf(term, at + 1, StringComparison.Ordinal);
+        }
+
+        return false;
     }
 
     /// <summary>

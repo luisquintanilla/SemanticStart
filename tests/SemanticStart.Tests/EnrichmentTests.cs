@@ -280,6 +280,60 @@ public sealed class EnrichmentTests
         Assert.Contains("edit", profile.Synonyms, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Summary_SurvivesAnApiNameInTheSentence()
+    {
+        var entity = CreateEntity("DebugView", EntityKind.Application, "dbgview.exe");
+
+        var profile = await new HeuristicProfileSynthesizer().SynthesizeAsync(
+            entity,
+            [
+                new EnrichmentDocument
+                {
+                    EntityId = entity.Id,
+                    Provider = "learn",
+                    IsOnline = true,
+                    Text = "This program intercepts calls made to DbgPrint by device drivers and OutputDebugString made by Win32 programs.",
+                },
+                new EnrichmentDocument
+                {
+                    EntityId = entity.Id,
+                    Provider = "local-docs",
+                    IsOnline = false,
+                    Text = "Local help file available: Dbgview.chm.",
+                },
+            ]);
+
+        // "OutputDebugString" is seventeen characters, which the identifier guard read as an
+        // unbroken run far longer than an English word - the shape of a deployment slug. Rejecting
+        // the sentence over it cost DebugView the only text that said what it does, and its
+        // summary fell through to the presence of a help file beside the binary.
+        Assert.Contains("intercepts", profile.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("help file", profile.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Summary_StillRejectsAGeneratedIdentifier()
+    {
+        var entity = CreateEntity("Power Automate", EntityKind.Application, "powerautomate.exe");
+
+        var profile = await new HeuristicProfileSynthesizer().SynthesizeAsync(
+            entity,
+            [
+                new EnrichmentDocument
+                {
+                    EntityId = entity.Id,
+                    Provider = "msix-manifest",
+                    IsOnline = false,
+                    Text = "URI Power Platform Region Is preview prodnorwayeastmmrns-1-whuok7nwdzy2s.",
+                },
+            ]);
+
+        // The run the guard exists for has no word boundaries in it, so reading capitals as
+        // boundaries does not reach it.
+        Assert.DoesNotContain("prodnorwayeast", profile.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static Entity CreateEntity(string name, EntityKind kind, string target) => new()
     {
         Id = "test:" + target,

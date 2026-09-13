@@ -144,6 +144,15 @@ public static class RelevanceCorpus
         },
         new()
         {
+            Query = "view memory usage",
+            AcceptableResults = ["VMMap", "RAMMap", "RamMap", "Resource Monitor", "Task Manager", "Performance Monitor", "Process Explorer"],
+            RequiredResults = ["VMMap"],
+            ForbiddenResults = ["DebugView"],
+            WithinTopN = 3,
+            Rationale = "Reported: DebugView above Task Manager and Resource Monitor on a memory query. Two separate faults, and only one of them was ranking. Its summary read 'Local help file available: Dbgview.', because the sentence that says what the program does names the Win32 function OutputDebugString, and the guard against machine-generated identifiers rejected the whole sentence over that one seventeen-character run - so the summary fell through every real source to the presence of a .chm beside the binary. Fixed by reading a capital after a lower-case letter as the word boundary the writer put there, which is what separates an API name from a deployment slug. Ranking was the second fault and the summary fix did not touch it: 'view' is genuinely all over DebugView, thirteen times in its own menus, but every occurrence is the word inside its name, and it matches neither 'memory' nor 'usage' in anything that says what it is for. That is the one shape the corroboration clause cannot judge, because it claims the two arms found the same thing independently and here they found the same name twice - the cosine lifted by the token the BM25 score is built from. See HybridSearchEngine.HasNameOnlyLexis. The case pins only that DebugView is absent and the virtual memory analyzer leads; which of the memory tools follows is not something it should fix, and DebugView still leads 'debug output' and 'view debug messages', where its name is the answer rather than the coincidence.",
+        },
+        new()
+        {
             Query = "todo",
             AcceptableResults = ["Microsoft To Do", "To Do"],
             RequiredResults = ["Outlook (classic)"],

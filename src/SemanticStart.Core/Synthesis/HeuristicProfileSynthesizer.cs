@@ -186,10 +186,25 @@ public sealed class HeuristicProfileSynthesizer : IProfileSynthesizer
         var runHasDigit = false;
         var runHasLetter = false;
         var mixedRun = false;
+        var previous = '\0';
         foreach (var ch in t)
         {
             if (char.IsLetterOrDigit(ch))
             {
+                // A capital after a lower-case letter is a word boundary the writer put there.
+                // "OutputDebugString" is three words and an API name a person would recognise;
+                // "prodnorwayeastmmrns" is one run of nineteen characters and is not. Without this
+                // the length test below cannot tell them apart, and it rejected DebugView's entire
+                // description - the only text that said what the program does - because that
+                // sentence names a Win32 function. Its summary then fell through to the next
+                // source and read "Local help file available: Dbgview."
+                if (char.IsUpper(ch) && char.IsLower(previous))
+                {
+                    run = 0;
+                    runHasDigit = false;
+                    runHasLetter = false;
+                }
+
                 run++;
                 runHasDigit |= char.IsDigit(ch);
                 runHasLetter |= char.IsLetter(ch);
@@ -197,6 +212,8 @@ public sealed class HeuristicProfileSynthesizer : IProfileSynthesizer
                 longestRun = Math.Max(longestRun, run);
             }
             else { run = 0; runHasDigit = false; runHasLetter = false; }
+
+            previous = ch;
         }
 
         // Two shapes of identifier, chosen so that ordinary product vocabulary survives:
