@@ -24,6 +24,7 @@ On the Windows 11 machine these numbers were taken from:
 | Query latency | 3.1 ms median, 5.0 ms p95 |
 | Relevance corpus | 56/64, MRR 0.864, correct answer first 84% of the time |
 | Full rebuild | ~7 minutes, once |
+| Background refresh | ~4.5 seconds, hourly |
 | Re-running one enricher | 2.5 seconds |
 | Rescanning one collector | ~10 seconds |
 
@@ -224,6 +225,41 @@ Rebuilding belongs to the app, not to the Settings window: you can close Setting
 runs in the background, and a tray notification tells you when it finishes. Reopening Settings
 rejoins the build already in progress. (It used to be the other way round, so closing the window
 silently threw away the first index build and left the app finding nothing.)
+
+### Staying current
+
+An index is correct for exactly as long as the machine stands still, and the moment it stops being
+correct is the moment it matters most: installing a program is when you are most likely to reach for
+a launcher to run it, and until something rescans, the thing you just installed is the one thing that
+cannot be found. The reverse is worse — an uninstalled program keeps ranking until you launch it and
+it fails.
+
+So SemanticStart rescans on its own, on by default (**Keep the index up to date automatically**):
+
+- **Two minutes after launch** — late enough to stay out of the way of a login, where every startup
+  program is competing for the same disk, and early enough that anything installed while the app was
+  closed shows up quickly.
+- **When the Start Menu changes** — installing or removing a program writes there, which is the
+  cheapest reliable signal that the machine has changed. A refresh waits for 45 seconds of quiet
+  first, because an installer writes its shortcuts over several seconds and scanning mid-install
+  indexes a half-written folder.
+- **Hourly after that** — measured from the end of the previous scan, and from wall-clock time
+  rather than a timer, so a laptop that sleeps overnight refreshes when it wakes instead of coming
+  back still holding most of an hour.
+
+This is affordable only because a rebuild is incremental: discovery runs, stored content hashes are
+compared, and everything unchanged is skipped before any documentation is gathered or any text is
+embedded. **A scan of an unchanged machine takes about 4.5 seconds** — a hundredth of the seven
+minutes a full rebuild costs, and the reason this can run on a schedule at all.
+
+A background scan never interrupts anything. It is skipped while the overlay is open, because a
+refresh ends by reloading the search engine and would stall the query you are typing; it is skipped
+while a rebuild you started is already running; and it never fires on an empty index, since a first
+build is minutes of work that belongs to setup. Nothing is announced — a notification every hour
+about something nobody asked for is how a notification channel gets muted.
+
+Two keys in `settings.json` control it: `backgroundRefresh` (default `true`) and
+`refreshIntervalMinutes` (default `60`, clamped to 15–1440).
 
 ### The CLI
 

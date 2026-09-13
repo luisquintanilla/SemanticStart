@@ -12,6 +12,7 @@ public partial class App : System.Windows.Application
     private ActivationManager? _activationManager;
     private TrayIconService? _trayIconService;
     private IndexRebuildCoordinator? _rebuilds;
+    private IndexRefreshScheduler? _refreshScheduler;
     private SettingsWindow? _settingsWindow;
     private Mutex? _instanceMutex;
     private EventWaitHandle? _activateSignal;
@@ -72,6 +73,15 @@ public partial class App : System.Windows.Application
         _activationManager.HotKeyRegistered += OnHotKeyRegistered;
         _activationManager.Start();
         _trayIconService = new TrayIconService(_overlayWindow, () => ShowSettingsWindow(), () => RebuildIndexFromTrayAsync(), () => Shutdown(), settings);
+
+        // Started before the index is loaded on purpose: the scheduler re-checks every minute and
+        // declines to do anything while the index is empty, so there is nothing to sequence here.
+        _refreshScheduler = new IndexRefreshScheduler(
+            _settingsService,
+            _searchService,
+            _rebuilds,
+            () => _overlayWindow?.IsOpen ?? false);
+        _refreshScheduler.Start();
 
         _ = WarmStartAsync(settings);
     }
@@ -183,6 +193,7 @@ public partial class App : System.Windows.Application
     {
         _mcpCancellation?.Cancel();
         _trayIconService?.Dispose();
+        _refreshScheduler?.Dispose();
         _rebuilds?.Dispose();
         _activationManager?.Dispose();
         _searchService?.Dispose();
@@ -295,11 +306,21 @@ public partial class App : System.Windows.Application
     /// <summary>
     /// Tells the user a background rebuild finished. Now that closing the settings window no longer
     /// stops the build, the window that was showing progress is often gone by the time it ends.
+    ///
+    /// Only for rebuilds the user asked for. A scheduled refresh that announced itself every hour
+    /// would be a notification about something nobody requested and nobody needs to act on, which
+    /// is how a useful notification channel gets muted.
     /// </summary>
     private void OnRebuildStateChanged(object? sender, IndexRebuildState state)
     {
         if (state.Outcome is not (RebuildOutcome.Completed or RebuildOutcome.Failed))
             return;
+
+        if (state.Trigger == RebuildTrigger.Automatic)
+        {
+            Log.Info($"Background index refresh {state.Outcome.ToString()!.ToLowerInvariant()}; {_searchService?.Count ?? 0} entities loaded.");
+            return;
+        }
 
         var message = state.Outcome == RebuildOutcome.Completed
             ? $"Indexing finished. {_searchService?.Count ?? 0} apps, tools, and settings are searchable."

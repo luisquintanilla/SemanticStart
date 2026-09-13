@@ -49,7 +49,7 @@ public sealed class IndexRebuildCoordinator : IDisposable
     /// rebuild does; failures are reported through <see cref="StateChanged"/> rather than thrown,
     /// because the caller is usually a click handler with nowhere to put an exception.
     /// </summary>
-    public Task StartAsync(AppSettings settings, bool force)
+    public Task StartAsync(AppSettings settings, bool force, RebuildTrigger trigger = RebuildTrigger.User)
     {
         lock (_lock)
         {
@@ -58,7 +58,7 @@ public sealed class IndexRebuildCoordinator : IDisposable
 
             _cts?.Dispose();
             _cts = new CancellationTokenSource();
-            _current = RunAsync(settings, force, _cts.Token);
+            _current = RunAsync(settings, force, trigger, _cts.Token);
             return _current;
         }
     }
@@ -73,29 +73,30 @@ public sealed class IndexRebuildCoordinator : IDisposable
             _cts?.Cancel();
     }
 
-    private async Task RunAsync(AppSettings settings, bool force, CancellationToken cancellationToken)
+    private async Task RunAsync(AppSettings settings, bool force, RebuildTrigger trigger, CancellationToken cancellationToken)
     {
-        Publish(new IndexRebuildState(true, 0, "Starting rebuild...", null));
+        Publish(new IndexRebuildState(true, 0, "Starting rebuild...", null, trigger));
 
         var progress = new Progress<IndexProgress>(p => Publish(new IndexRebuildState(
             IsRunning: true,
             Fraction: p.Fraction,
             Message: p.Total > 0 ? $"{p.Phase}: {p.Completed}/{p.Total} {p.CurrentItem}" : $"{p.Phase}: {p.CurrentItem}",
-            Outcome: null)));
+            Outcome: null,
+            Trigger: trigger)));
 
         try
         {
             await _rebuild(settings, force, progress, cancellationToken);
-            Publish(new IndexRebuildState(false, 1, $"Rebuild complete. {_entityCount()} entities loaded.", RebuildOutcome.Completed));
+            Publish(new IndexRebuildState(false, 1, $"Rebuild complete. {_entityCount()} entities loaded.", RebuildOutcome.Completed, trigger));
         }
         catch (OperationCanceledException)
         {
-            Publish(new IndexRebuildState(false, 0, "Rebuild canceled.", RebuildOutcome.Canceled));
+            Publish(new IndexRebuildState(false, 0, "Rebuild canceled.", RebuildOutcome.Canceled, trigger));
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Index rebuild failed");
-            Publish(new IndexRebuildState(false, 0, "Rebuild failed; see log for details.", RebuildOutcome.Failed));
+            Publish(new IndexRebuildState(false, 0, "Rebuild failed; see log for details.", RebuildOutcome.Failed, trigger));
         }
     }
 
@@ -121,11 +122,29 @@ public enum RebuildOutcome
     Failed,
 }
 
+/// <summary>
+/// Who asked for a rebuild. What is appropriate to interrupt the user with depends entirely on
+/// this: a person who clicked Rebuild is waiting to be told it finished, whereas a refresh that
+/// ran on a timer announcing itself every hour would be a notification for something the user
+/// neither asked for nor needs to know about.
+/// </summary>
+public enum RebuildTrigger
+{
+    User,
+    Automatic,
+}
+
 /// <param name="IsRunning">Whether a rebuild is in flight right now.</param>
 /// <param name="Fraction">Progress from 0 to 1.</param>
 /// <param name="Message">The line to show under the index summary.</param>
 /// <param name="Outcome">Set only on the final report of a run.</param>
-public sealed record IndexRebuildState(bool IsRunning, double Fraction, string Message, RebuildOutcome? Outcome)
+/// <param name="Trigger">Who asked for this run.</param>
+public sealed record IndexRebuildState(
+    bool IsRunning,
+    double Fraction,
+    string Message,
+    RebuildOutcome? Outcome,
+    RebuildTrigger Trigger = RebuildTrigger.User)
 {
     public static readonly IndexRebuildState Idle = new(false, 0, "Ready", null);
 }

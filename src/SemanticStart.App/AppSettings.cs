@@ -44,6 +44,25 @@ public sealed record AppSettings
     /// choice has to be offered before it starts, not after.
     /// </summary>
     public bool SetupCompleted { get; init; }
+
+    /// <summary>
+    /// Whether the index keeps itself current without being asked: shortly after startup, when the
+    /// Start Menu changes, and on an interval after that.
+    ///
+    /// On by default, because the alternative is an index that silently rots. Installing a program
+    /// is exactly the moment a user is most likely to reach for a launcher to run it, and until
+    /// something rescans, the one thing they just installed is the one thing that cannot be found.
+    /// </summary>
+    public bool BackgroundRefresh { get; init; } = true;
+
+    /// <summary>
+    /// How long between background refreshes. Clamped to 15 minutes and one day on load.
+    ///
+    /// An hour is cheap because the refresh is incremental: discovery runs, content hashes are
+    /// compared, and everything unchanged is skipped before any documentation is gathered or any
+    /// text is embedded. What it costs is a pass over the collectors, which is seconds.
+    /// </summary>
+    public int RefreshIntervalMinutes { get; init; } = 60;
 }
 
 public sealed class AppSettingsService
@@ -80,6 +99,7 @@ public sealed class AppSettingsService
                 HotKey = hotKey,
                 ResultLimit = Math.Clamp(settings.ResultLimit, 3, 20),
                 SearchDebounceMilliseconds = Math.Clamp(settings.SearchDebounceMilliseconds, 0, 2000),
+                RefreshIntervalMinutes = Math.Clamp(settings.RefreshIntervalMinutes, 15, 24 * 60),
                 LaunchAtLogin = IsLaunchAtLoginEnabled(),
             };
         }

@@ -114,6 +114,7 @@ public partial class SettingsWindow : Window
     {
         _loading = true;
         HotKeyBox.HotKey = _settings.HotKey;
+        BackgroundRefreshBox.IsChecked = _settings.BackgroundRefresh;
         OnlineBox.IsChecked = _settings.AllowOnlineEnrichment;
         LoginBox.IsChecked = _settings.LaunchAtLogin;
         LimitSlider.Value = _settings.ResultLimit;
@@ -232,6 +233,7 @@ public partial class SettingsWindow : Window
         _settings = _settings with
         {
             HotKey = hotKey,
+            BackgroundRefresh = BackgroundRefreshBox.IsChecked == true,
             AllowOnlineEnrichment = OnlineBox.IsChecked == true,
             LaunchAtLogin = LoginBox.IsChecked == true,
             ResultLimit = (int)Math.Round(LimitSlider.Value),

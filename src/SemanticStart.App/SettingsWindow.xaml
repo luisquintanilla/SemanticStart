@@ -129,6 +129,14 @@
 
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
+                        <CheckBox x:Name="BackgroundRefreshBox" Content="Keep the index up to date automatically" Checked="Setting_Changed" Unchecked="Setting_Changed" />
+                        <TextBlock Style="{StaticResource Caption}"
+                                   Text="Rescans shortly after startup, when the Start Menu changes, and hourly after that. Only new and removed items cost anything — everything unchanged is reused, so a scan of a machine that has not changed takes seconds." />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
                         <CheckBox x:Name="OnlineBox" Content="Allow online enrichment while indexing" Checked="Setting_Changed" Unchecked="Setting_Changed" />
                         <TextBlock Style="{StaticResource Caption}"
                                    Text="Fetches public documentation to improve descriptions. Searches always stay on this device; only indexing touches the network, and results are cached." />

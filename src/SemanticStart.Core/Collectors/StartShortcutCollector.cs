@@ -12,7 +12,7 @@ public sealed class StartShortcutCollector : IEntityCollector
 
     public string Source => "startmenu";
 
-    public bool IsSupported => OperatingSystem.IsWindows() && GetRoots().Any(Directory.Exists);
+    public bool IsSupported => OperatingSystem.IsWindows() && Roots().Any(Directory.Exists);
 
     public async IAsyncEnumerable<Entity> CollectAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -21,7 +21,7 @@ public sealed class StartShortcutCollector : IEntityCollector
         if (!IsSupported)
             yield break;
 
-        foreach (var root in GetRoots().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var root in Roots().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             IEnumerable<string> files;
             try
@@ -159,7 +159,12 @@ public sealed class StartShortcutCollector : IEntityCollector
         return Path.GetFileName(parent);
     }
 
-    private static IEnumerable<string> GetRoots()
+    /// <summary>
+    /// The Start Menu directories this reads, exposed so that anything wanting to notice an
+    /// install or an uninstall watches exactly what the collector enumerates rather than its own
+    /// guess at where shortcuts live.
+    /// </summary>
+    public static IEnumerable<string> Roots()
     {
         var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         if (!string.IsNullOrWhiteSpace(programData))

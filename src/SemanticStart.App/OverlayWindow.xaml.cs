@@ -80,14 +80,26 @@ public partial class OverlayWindow : Window
         // Registry theme changes are not always broadcast, so re-read on every activation.
         ThemeService.Refresh();
         PositionNearStartMenu();
+        _isOpen = true;
         Show();
         Activate();
         SearchBox.Focus();
         SearchBox.SelectAll();
     }
 
+    /// <summary>
+    /// Whether the overlay is on screen, readable from any thread. <see cref="UIElement.IsVisible"/>
+    /// is a dependency property and so may only be read on the UI thread; the background refresh
+    /// scheduler asks this from a timer, and marshalling to the dispatcher to answer would make a
+    /// background job wait on a thread the user is typing into.
+    /// </summary>
+    public bool IsOpen => _isOpen;
+
+    private volatile bool _isOpen;
+
     public void HideAndReset()
     {
+        _isOpen = false;
         Hide();
         ClearCopiedFlash();
         _viewModel.Clear();
