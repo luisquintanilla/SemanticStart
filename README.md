@@ -84,18 +84,19 @@ matches found"* instead of a page of near-misses.
 Grab the latest portable build from the [Releases page](https://github.com/markrussinovich/SemanticStart/releases/latest).
 It is self-contained, so nothing else has to be installed — not even the .NET runtime.
 
-1. Download `SemanticStart-<version>-win-x64.zip`.
+1. Download the build for your processor:
+   - AMD64/x86-64: `SemanticStart-<version>-win-x64.zip`
+   - ARM64: `SemanticStart-<version>-win-arm64.zip`
 2. Unblock it before extracting — Windows marks downloaded archives and the mark is inherited by
    every file inside, which surfaces later as a SmartScreen prompt on launch rather than as
    anything mentioning the zip:
    ```powershell
-   Unblock-File .\SemanticStart-<version>-win-x64.zip
+   Unblock-File .\SemanticStart-<version>-win-<architecture>.zip
    ```
 3. Extract anywhere and run `SemanticStart.App.exe`.
 
-Current builds are unsigned, so SmartScreen will warn on first run; *More info* → *Run anyway*. Each
-release publishes the zip's SHA256 next to it if you would rather verify the download first.
-(Releases are signed automatically once the pipeline is [configured for it](#code-signing).)
+Release builds are signed and timestamped. SmartScreen can still warn until a new binary builds
+reputation. Each release publishes both zip files' SHA256 checksums next to them.
 
 First launch builds the index and downloads the embedding model once — see [Usage](#usage).
 
@@ -121,11 +122,13 @@ dotnet build SemanticStart.slnx
 dotnet test tests\SemanticStart.Tests
 ```
 
-Portable, self-contained build (no .NET runtime needed on the target machine):
+Portable, self-contained AMD64 build (no .NET runtime needed on the target machine):
 
 ```powershell
 dotnet publish src\SemanticStart.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts\portable
 ```
+
+Use `-r win-arm64` for the ARM64 build.
 
 `PublishSingleFile` folds the managed assemblies into the exe but leaves the native dependencies —
 ONNX Runtime, the SQLite engine, WPF's unmanaged libraries — beside it, so the whole folder is the
@@ -133,8 +136,9 @@ unit that ships, not just the exe.
 
 ### Releasing
 
-`.github/workflows/release.yml` builds that same command on a clean runner, runs the tests, and
-attaches the zip and its SHA256 to a GitHub Release. Pushing a `v*` tag releases that version:
+`.github/workflows/release.yml` builds AMD64 and ARM64 packages on a clean runner, runs the tests,
+and attaches both signed zips and their SHA256 files to a GitHub Release. Pushing a `v*` tag
+releases that version:
 
 ```powershell
 git tag v1.0.1
@@ -146,7 +150,7 @@ instead of publishing it — useful for rehearsing a release, or reissuing one a
 
 #### Code signing
 
-The workflow signs `SemanticStart.App.exe` with [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/)
+The workflow signs both architectures' `SemanticStart.App.exe` with [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/)
 when the repository is configured for it, and builds unsigned when it is not — so the release path
 works either way. Signing runs before packaging, so the published SHA256 is the hash of the signed
 binary. It uses GitHub OIDC, so Azure issues a short-lived token for each release instead of storing
