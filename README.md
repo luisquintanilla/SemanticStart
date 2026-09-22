@@ -4,6 +4,10 @@ Semantic search for the Windows Start menu. Describe what you want to do — *"f
 *"sandbox for testing untrusted apps"*, *"host a website locally"* — and get the app, setting, or
 built-in Windows feature that actually does it.
 
+**[Download the latest signed release](https://github.com/markrussinovich/SemanticStart/releases/latest)**
+for Windows AMD64 or ARM64. The portable builds are self-contained; extract the zip and run
+`SemanticStart.App.exe`.
+
 Windows Start search is lexical: it matches substrings of names. If you don't already know what a
 tool is called, you can't find it. SemanticStart builds a local semantic index of your installed
 applications **and** built-in Windows features, then serves it from a Start-like overlay. All
@@ -75,7 +79,7 @@ matches found"* instead of a page of near-misses.
 
 ## Requirements
 
-- Windows 10 1809 or later, x64
+- Windows 10 1809 or later, AMD64 or ARM64
 - No administrator rights, no service, no driver, and **no modification of `explorer.exe`**
 - CPU-only: no NPU or GPU required
 
