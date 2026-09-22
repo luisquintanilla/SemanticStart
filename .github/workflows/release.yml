@@ -28,19 +28,24 @@ on:
 # The job creates a release, which is a write to the repository.
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
     # WPF, and the app is Windows-only. There is no cross-compilation route for this target.
     runs-on: windows-latest
+    # Gives OIDC one stable subject for tag and manual runs:
+    # repo:markrussinovich/SemanticStart:environment:release
+    environment: release
 
     # Signing identity is repository configuration, never hardcoded here: a certificate says who
     # vouches for the binary, so the account and profile belong to whoever publishes this build.
-    # Secrets carry the credential; variables carry the non-secret names. Absent both, the build
-    # still runs and ships unsigned, which keeps the release path working before signing exists.
+    # OIDC carries no stored Azure password; secrets hide the directory/application identifiers,
+    # while variables carry the non-secret signing resource names. Absent both, the build still
+    # runs and ships unsigned, which keeps the release path working before signing exists.
     env:
-      HAS_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_CLIENT_SECRET != '' && secrets.AZURE_TENANT_ID != '' && vars.AZURE_SIGNING_ACCOUNT != '' && vars.AZURE_CERTIFICATE_PROFILE != '' }}
-      ANY_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' || secrets.AZURE_CLIENT_SECRET != '' || secrets.AZURE_TENANT_ID != '' || vars.AZURE_SIGNING_ACCOUNT != '' || vars.AZURE_CERTIFICATE_PROFILE != '' }}
+      HAS_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '' && vars.AZURE_SIGNING_ACCOUNT != '' && vars.AZURE_CERTIFICATE_PROFILE != '' }}
+      ANY_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' || secrets.AZURE_TENANT_ID != '' || secrets.AZURE_SUBSCRIPTION_ID != '' || vars.AZURE_SIGNING_ACCOUNT != '' || vars.AZURE_CERTIFICATE_PROFILE != '' }}
       # Region-specific, and a mismatch fails with an unhelpful authorization error rather than a
       # wrong-endpoint one. Defaulted only because a default is harmless when the account is unset.
       SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT || 'https://wus2.codesigning.azure.net/' }}
@@ -57,7 +62,7 @@ jobs:
         run: |
           throw @"
           Azure Trusted Signing is partially configured. All five are required:
-            secrets:   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
+            secrets:   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_SUBSCRIPTION_ID
             variables: AZURE_SIGNING_ACCOUNT, AZURE_CERTIFICATE_PROFILE
           Clear all five to build unsigned on purpose.
           "@
@@ -136,15 +141,21 @@ jobs:
       # Only SemanticStart.App.exe needs a signature. The native dependencies beside it -
       # onnxruntime, the SQLite engine, WPF's unmanaged bits - already ship signed by Microsoft.
       #
-      # No azure/login step: the action authenticates from the credentials passed to it directly,
-      # so nothing else needs to join the supply chain of a binary people download and run.
+      # GitHub exchanges its short-lived OIDC token for an Azure token. The federated credential
+      # accepts only this repository's release environment, so there is no Azure password to
+      # rotate or steal from repository secrets.
+      - name: Log in to Azure for signing
+        if: env.HAS_SIGNING == 'true'
+        uses: azure/login@935127ca5bb3c4b02c9c2c10060028383878f33f # v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Sign the executable
         if: env.HAS_SIGNING == 'true'
-        uses: azure/trusted-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1
+        uses: azure/artifact-signing-action@c0ae2c1d0c1847ab81ac0ab8521bee597cfedd30 # v2
         with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
           endpoint: ${{ env.SIGNING_ENDPOINT }}
           signing-account-name: ${{ env.SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ env.SIGNING_PROFILE }}
@@ -156,6 +167,18 @@ jobs:
           # design - days, not years - which makes this mandatory rather than merely advisable.
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
+          # azure/login has already authenticated the CLI with OIDC. Disable every other
+          # DefaultAzureCredential path so a runner-local identity cannot be selected by mistake.
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
 
       # The signing step can succeed without producing a usable signature, so the claim is checked
       # against the file rather than trusted. Reading back the subject also puts the publisher

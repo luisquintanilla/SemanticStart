@@ -146,23 +146,26 @@ instead of publishing it — useful for rehearsing a release, or reissuing one a
 
 #### Code signing
 
-The workflow signs `SemanticStart.App.exe` with [Azure Trusted Signing](https://learn.microsoft.com/azure/trusted-signing/)
+The workflow signs `SemanticStart.App.exe` with [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/)
 when the repository is configured for it, and builds unsigned when it is not — so the release path
 works either way. Signing runs before packaging, so the published SHA256 is the hash of the signed
-binary. Configure it with three secrets and two variables:
+binary. It uses GitHub OIDC, so Azure issues a short-lived token for each release instead of storing
+a client secret. Configure it with three secrets and three variables:
 
 | Setting | Kind | Value |
 |---|---|---|
-| `AZURE_TENANT_ID` | secret | Service principal tenant |
-| `AZURE_CLIENT_ID` | secret | Service principal app ID |
-| `AZURE_CLIENT_SECRET` | secret | Service principal password |
-| `AZURE_SIGNING_ACCOUNT` | variable | Trusted Signing account name |
+| `AZURE_TENANT_ID` | secret | Entra tenant ID |
+| `AZURE_CLIENT_ID` | secret | Entra application ID |
+| `AZURE_SUBSCRIPTION_ID` | secret | Azure subscription ID |
+| `AZURE_SIGNING_ACCOUNT` | variable | Artifact Signing account name |
 | `AZURE_CERTIFICATE_PROFILE` | variable | Certificate profile name |
-| `AZURE_SIGNING_ENDPOINT` | variable | Region endpoint, if not `wus2` |
+| `AZURE_SIGNING_ENDPOINT` | variable | Region endpoint |
 
 Setting some but not all of them fails the build rather than silently shipping unsigned. The
-service principal needs the **Trusted Signing Certificate Profile Signer** role, and the profile
-must be **Public Trust** for the signature to affect SmartScreen.
+Entra application needs a federated credential for the
+`repo:markrussinovich/SemanticStart:environment:release` subject and the
+**Artifact Signing Certificate Profile Signer** role. The profile must be **Public Trust** for the
+signature to affect SmartScreen.
 
 ## Usage
 
