@@ -34,8 +34,8 @@ jobs:
   release:
     # WPF, and the app is Windows-only. There is no cross-compilation route for this target.
     runs-on: windows-latest
-    # Gives OIDC one stable subject for tag and manual runs:
-    # repo:markrussinovich/SemanticStart:environment:release
+    # Gives OIDC one stable, environment-bound subject for tag and manual runs. GitHub emits this
+    # repository's immutable owner/repository IDs in the token rather than its renameable names.
     environment: release
 
     # Signing identity is repository configuration, never hardcoded here: a certificate says who

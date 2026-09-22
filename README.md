@@ -162,10 +162,10 @@ a client secret. Configure it with three secrets and three variables:
 | `AZURE_SIGNING_ENDPOINT` | variable | Region endpoint |
 
 Setting some but not all of them fails the build rather than silently shipping unsigned. The
-Entra application needs a federated credential for the
-`repo:markrussinovich/SemanticStart:environment:release` subject and the
-**Artifact Signing Certificate Profile Signer** role. The profile must be **Public Trust** for the
-signature to affect SmartScreen.
+Entra application needs a federated credential matching the GitHub OIDC subject for the `release`
+environment and the **Artifact Signing Certificate Profile Signer** role. GitHub may use immutable
+owner/repository IDs in that subject rather than the repository names. The profile must be
+**Public Trust** for the signature to affect SmartScreen.
 
 ## Usage
 
