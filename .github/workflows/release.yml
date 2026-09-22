@@ -68,10 +68,10 @@ jobs:
           Clear all five to build unsigned on purpose.
           "@
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           # The repo pins no global.json, so the SDK feature band is chosen here instead. Kept as
           # a wildcard within the major version so patch updates are picked up without edits.
@@ -244,7 +244,7 @@ jobs:
       # Uploaded separately from the release so the build is still downloadable from the run when
       # a release is a draft, or when the release step fails.
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: SemanticStart-${{ steps.version.outputs.version }}-Windows
           path: artifacts/upload/
