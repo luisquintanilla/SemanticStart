@@ -83,8 +83,10 @@ rather than padding the list to the requested count, so a query nothing answers 
 matches found"* instead of a page of near-misses.
 
 The vector hot path uses `System.Numerics.Tensors.TensorPrimitives` for SIMD dot products and
-normalization. A local benchmark over 384-dimensional vectors and 10,000-row scans measured it at
-roughly 1.5–2.3x the throughput of the previous hand-written `Vector<float>` loop.
+normalization. A local benchmark over 384-dimensional vectors and 10,000-row scans measured
+2.13x dot-product throughput versus the previous hand-written `Vector<float>` loop on the
+validation machine. The reproducible probe and its run instructions are in
+[`benchmarks/README.md`](benchmarks/README.md); exact timings vary by CPU and runtime.
 
 ## Requirements
 
