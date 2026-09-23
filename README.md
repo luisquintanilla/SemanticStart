@@ -4,10 +4,6 @@ Semantic search for the Windows Start menu. Describe what you want to do — *"f
 *"sandbox for testing untrusted apps"*, *"host a website locally"* — and get the app, setting, or
 built-in Windows feature that actually does it.
 
-**[Download the latest signed release](https://github.com/markrussinovich/SemanticStart/releases/latest)**
-for Windows AMD64 or ARM64. The portable builds are self-contained; extract the zip and run
-`SemanticStart.App.exe`.
-
 Windows Start search is lexical: it matches substrings of names. If you don't already know what a
 tool is called, you can't find it. SemanticStart builds a local semantic index of your installed
 applications **and** built-in Windows features, then serves it from a Start-like overlay. All
@@ -33,6 +29,28 @@ On the Windows 11 machine these numbers were taken from:
 | Background refresh | ~4.5 seconds, hourly |
 | Re-running one enricher | 2.5 seconds |
 | Rescanning one collector | ~10 seconds |
+
+## Download
+
+Download the [latest signed release](https://github.com/markrussinovich/SemanticStart/releases/latest).
+The portable builds are self-contained, so nothing else has to be installed — not even the .NET
+runtime.
+
+1. Download the build for your processor:
+   - AMD64/x86-64: `SemanticStart-<version>-win-x64.zip`
+   - ARM64: `SemanticStart-<version>-win-arm64.zip`
+2. Unblock it before extracting — Windows marks downloaded archives and the mark is inherited by
+   every file inside, which surfaces later as a SmartScreen prompt on launch rather than as
+   anything mentioning the zip:
+   ```powershell
+   Unblock-File .\SemanticStart-<version>-win-<architecture>.zip
+   ```
+3. Extract anywhere and run `SemanticStart.App.exe`.
+
+Release builds are signed and timestamped. SmartScreen can still warn until a new binary builds
+reputation. Each release publishes both zip files' SHA256 checksums next to them.
+
+First launch builds the index and downloads the embedding model once — see [Usage](#usage).
 
 ## How it works
 
@@ -82,27 +100,6 @@ matches found"* instead of a page of near-misses.
 - Windows 10 1809 or later, AMD64 or ARM64
 - No administrator rights, no service, no driver, and **no modification of `explorer.exe`**
 - CPU-only: no NPU or GPU required
-
-## Download
-
-Grab the latest portable build from the [Releases page](https://github.com/markrussinovich/SemanticStart/releases/latest).
-It is self-contained, so nothing else has to be installed — not even the .NET runtime.
-
-1. Download the build for your processor:
-   - AMD64/x86-64: `SemanticStart-<version>-win-x64.zip`
-   - ARM64: `SemanticStart-<version>-win-arm64.zip`
-2. Unblock it before extracting — Windows marks downloaded archives and the mark is inherited by
-   every file inside, which surfaces later as a SmartScreen prompt on launch rather than as
-   anything mentioning the zip:
-   ```powershell
-   Unblock-File .\SemanticStart-<version>-win-<architecture>.zip
-   ```
-3. Extract anywhere and run `SemanticStart.App.exe`.
-
-Release builds are signed and timestamped. SmartScreen can still warn until a new binary builds
-reputation. Each release publishes both zip files' SHA256 checksums next to them.
-
-First launch builds the index and downloads the embedding model once — see [Usage](#usage).
 
 ## Building
 
