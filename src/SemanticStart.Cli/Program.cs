@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.AI;
 using SemanticStart.Core.Collectors;
 using SemanticStart.Core.Embeddings;
 using SemanticStart.Core.Enrichment;
@@ -109,11 +110,14 @@ internal static class Program
             StrongLexicalScore = 0,
         };
 
-        var embeddings = await CreateEmbeddingModelAsync();
+        var embeddings = await CreateEmbeddingGeneratorAsync();
         using var store = new SqliteIndexStore();
         using (embeddings)
         {
-            await store.InitializeAsync(embeddings.ModelId, embeddings.Dimensions);
+            var metadata = embeddings.GetRequiredMetadata();
+            await store.InitializeAsync(
+                metadata.DefaultModelId!,
+                metadata.DefaultModelDimensions!.Value);
 
             var strict = new HybridSearchEngine(store, embeddings);
             var loose = new HybridSearchEngine(store, embeddings, permissive);
@@ -342,7 +346,7 @@ internal static class Program
             }
         }
         Console.WriteLine("Preparing embedding model...");
-        var embeddings = await CreateEmbeddingModelAsync();
+        var embeddings = await CreateEmbeddingGeneratorAsync();
 
         using (embeddings)
         {
@@ -472,11 +476,14 @@ internal static class Program
     private static async Task<int> StatsAsync()
     {
         using var store = new SqliteIndexStore();
-        var embeddings = await CreateEmbeddingModelAsync();
+        var embeddings = await CreateEmbeddingGeneratorAsync();
 
         using (embeddings)
         {
-            await store.InitializeAsync(embeddings.ModelId, embeddings.Dimensions);
+            var metadata = embeddings.GetRequiredMetadata();
+            await store.InitializeAsync(
+                metadata.DefaultModelId!,
+                metadata.DefaultModelDimensions!.Value);
             var all = await store.GetAllAsync();
 
             Console.WriteLine($"Entities:  {all.Count}");
@@ -504,7 +511,7 @@ internal static class Program
         }
     }
 
-    private static async Task<MiniLmEmbeddingModel> CreateEmbeddingModelAsync()
+    private static async Task<IEmbeddingGenerator<string, Embedding<float>>> CreateEmbeddingGeneratorAsync()
     {
         var bootstrapper = new EmbeddingModelBootstrapper();
 
@@ -520,16 +527,22 @@ internal static class Program
         });
 
         var files = await bootstrapper.EnsureAsync(progress);
-        return new MiniLmEmbeddingModel(files.ModelPath, files.VocabPath);
+        return new OnnxEmbeddingGenerator(files.ModelPath, files.VocabPath);
     }
 
-    private static async Task<(HybridSearchEngine Engine, MiniLmEmbeddingModel Embeddings, SqliteIndexStore Store)>
+    private static async Task<(
+        HybridSearchEngine Engine,
+        IEmbeddingGenerator<string, Embedding<float>> Embeddings,
+        SqliteIndexStore Store)>
         CreateEngineAsync()
     {
-        var embeddings = await CreateEmbeddingModelAsync();
+        var embeddings = await CreateEmbeddingGeneratorAsync();
         var store = new SqliteIndexStore();
 
-        await store.InitializeAsync(embeddings.ModelId, embeddings.Dimensions);
+        var metadata = embeddings.GetRequiredMetadata();
+        await store.InitializeAsync(
+            metadata.DefaultModelId!,
+            metadata.DefaultModelDimensions!.Value);
 
         var engine = new HybridSearchEngine(store, embeddings);
         await engine.LoadAsync();

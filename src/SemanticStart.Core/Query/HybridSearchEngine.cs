@@ -2,7 +2,9 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.AI;
 using SemanticStart.Core.Abstractions;
+using SemanticStart.Core.Embeddings;
 using SemanticStart.Core.Model;
 
 namespace SemanticStart.Core.Query;
@@ -25,7 +27,8 @@ namespace SemanticStart.Core.Query;
 public sealed class HybridSearchEngine : ISearchEngine
 {
     private readonly IIndexStore _store;
-    private readonly IEmbeddingModel _embeddings;
+    private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddings;
+    private readonly EmbeddingGeneratorMetadata _embeddingMetadata;
     private readonly RankingOptions _options;
 
     private readonly SemaphoreSlim _loadLock = new(1, 1);
@@ -38,10 +41,14 @@ public sealed class HybridSearchEngine : ISearchEngine
     /// </summary>
     private volatile Snapshot? _snapshot;
 
-    public HybridSearchEngine(IIndexStore store, IEmbeddingModel embeddings, RankingOptions? options = null)
+    public HybridSearchEngine(
+        IIndexStore store,
+        IEmbeddingGenerator<string, Embedding<float>> embeddings,
+        RankingOptions? options = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _embeddings = embeddings ?? throw new ArgumentNullException(nameof(embeddings));
+        _embeddingMetadata = _embeddings.GetRequiredMetadata();
         _options = options ?? RankingOptions.Default;
     }
 
@@ -73,7 +80,13 @@ public sealed class HybridSearchEngine : ISearchEngine
                     byOrdinal[ordinal] = i;
             }
 
-            _snapshot = new Snapshot(array, byId, byOrdinal, vectors, _embeddings.Dimensions, usage);
+            _snapshot = new Snapshot(
+                array,
+                byId,
+                byOrdinal,
+                vectors,
+                _embeddingMetadata.DefaultModelDimensions!.Value,
+                usage);
         }
         finally
         {
@@ -161,7 +174,11 @@ public sealed class HybridSearchEngine : ISearchEngine
         if (snapshot.Vectors.Length == 0 || snapshot.Dimensions == 0)
             return new VectorArmResult(results, []);
 
-        var embedded = await _embeddings.EmbedAsync([query], cancellationToken).ConfigureAwait(false);
+        var embedded = await _embeddings.GenerateVectorsAsync(
+                [query],
+                _embeddingMetadata.DefaultModelDimensions!.Value,
+                cancellationToken)
+            .ConfigureAwait(false);
         if (embedded.Count == 0)
             return new VectorArmResult(results, []);
 

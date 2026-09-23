@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.Extensions.AI;
 using SemanticStart.Core.Abstractions;
 using SemanticStart.Core.Collectors;
+using SemanticStart.Core.Embeddings;
 using SemanticStart.Core.Model;
 using SemanticStart.Core.Query;
 
@@ -18,18 +20,20 @@ public sealed class IndexBuilder
 {
     private readonly IReadOnlyList<IEntityCollector> _collectors;
     private readonly IEntityProfiler _profiler;
-    private readonly IEmbeddingModel _embeddings;
+    private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddings;
+    private readonly EmbeddingGeneratorMetadata _embeddingMetadata;
     private readonly IIndexStore _store;
 
     public IndexBuilder(
         IReadOnlyList<IEntityCollector> collectors,
         IEntityProfiler profiler,
-        IEmbeddingModel embeddings,
+        IEmbeddingGenerator<string, Embedding<float>> embeddings,
         IIndexStore store)
     {
         _collectors = collectors ?? throw new ArgumentNullException(nameof(collectors));
         _profiler = profiler ?? throw new ArgumentNullException(nameof(profiler));
         _embeddings = embeddings ?? throw new ArgumentNullException(nameof(embeddings));
+        _embeddingMetadata = _embeddings.GetRequiredMetadata();
         _store = store ?? throw new ArgumentNullException(nameof(store));
     }
 
@@ -41,7 +45,10 @@ public sealed class IndexBuilder
         options ??= IndexOptions.Default;
         var stopwatch = Stopwatch.StartNew();
 
-        await _store.InitializeAsync(_embeddings.ModelId, _embeddings.Dimensions, cancellationToken)
+        await _store.InitializeAsync(
+                _embeddingMetadata.DefaultModelId!,
+                _embeddingMetadata.DefaultModelDimensions!.Value,
+                cancellationToken)
             .ConfigureAwait(false);
 
         // Discovery always runs every collector, even when the build is scoped to one of them.
@@ -625,7 +632,11 @@ public sealed class IndexBuilder
             IReadOnlyList<float[]> vectors;
             try
             {
-                vectors = await _embeddings.EmbedAsync(texts, cancellationToken).ConfigureAwait(false);
+                vectors = await _embeddings.GenerateVectorsAsync(
+                        texts,
+                        _embeddingMetadata.DefaultModelDimensions!.Value,
+                        cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

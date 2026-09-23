@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+﻿using System.Numerics.Tensors;
 
 namespace SemanticStart.Core.Embeddings;
 
@@ -11,26 +11,7 @@ public static class CosineSimilarity
             throw new ArgumentException("Vectors must have the same length.", nameof(b));
         }
 
-        int i = 0;
-        float sum = 0;
-
-        if (Vector.IsHardwareAccelerated && a.Length >= Vector<float>.Count)
-        {
-            var vectorSum = Vector<float>.Zero;
-            for (; i <= a.Length - Vector<float>.Count; i += Vector<float>.Count)
-            {
-                vectorSum += new Vector<float>(a.Slice(i, Vector<float>.Count)) * new Vector<float>(b.Slice(i, Vector<float>.Count));
-            }
-
-            sum = Vector.Dot(vectorSum, Vector<float>.One);
-        }
-
-        for (; i < a.Length; i++)
-        {
-            sum += a[i] * b[i];
-        }
-
-        return sum;
+        return TensorPrimitives.Dot(a, b);
     }
 
     public static IReadOnlyList<(int Ordinal, float Score)> TopK(

@@ -1,4 +1,5 @@
 using System.IO;
+using Microsoft.Extensions.AI;
 using SemanticStart.Core;
 using SemanticStart.Core.Abstractions;
 using SemanticStart.Core.Collectors;
@@ -38,7 +39,7 @@ public sealed class SemanticSearchService : IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly SqliteIndexStore _store = new();
     private readonly AppSettings _settings;
-    private MiniLmEmbeddingModel? _embeddingModel;
+    private IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
     private HybridSearchEngine? _engine;
     private ShellEntityLauncher? _launcher;
     private bool _initialized;
@@ -108,9 +109,13 @@ public sealed class SemanticSearchService : IDisposable
                 return;
 
             var files = await new EmbeddingModelBootstrapper().EnsureAsync(null, cancellationToken);
-            _embeddingModel = new MiniLmEmbeddingModel(files.ModelPath, files.VocabPath);
-            await _store.InitializeAsync(_embeddingModel.ModelId, _embeddingModel.Dimensions, cancellationToken);
-            _engine = new HybridSearchEngine(_store, _embeddingModel);
+            _embeddingGenerator = new OnnxEmbeddingGenerator(files.ModelPath, files.VocabPath);
+            var metadata = _embeddingGenerator.GetRequiredMetadata();
+            await _store.InitializeAsync(
+                metadata.DefaultModelId!,
+                metadata.DefaultModelDimensions!.Value,
+                cancellationToken);
+            _engine = new HybridSearchEngine(_store, _embeddingGenerator);
             await _engine.LoadAsync(cancellationToken);
             _launcher = new ShellEntityLauncher(_store);
             _initialized = true;
@@ -140,14 +145,14 @@ public sealed class SemanticSearchService : IDisposable
     public async Task RebuildIndexAsync(AppSettings settings, bool force, IProgress<IndexProgress>? progress, CancellationToken cancellationToken)
     {
         await InitializeAsync(cancellationToken);
-        if (_embeddingModel is null || _engine is null)
+        if (_embeddingGenerator is null || _engine is null)
             return;
 
         await _gate.WaitAsync(cancellationToken);
         try
         {
             var profiler = new EnrichmentPipeline(EnricherRegistry.CreateAll(), new HeuristicProfileSynthesizer());
-            var builder = new IndexBuilder(CollectorRegistry.CreateAll(), profiler, _embeddingModel, _store);
+            var builder = new IndexBuilder(CollectorRegistry.CreateAll(), profiler, _embeddingGenerator, _store);
             await builder.BuildAsync(new IndexOptions { AllowNetwork = settings.AllowOnlineEnrichment, ForceFullRebuild = force }, progress, cancellationToken);
             _engine.Invalidate();
             await _engine.LoadAsync(cancellationToken);
@@ -161,7 +166,7 @@ public sealed class SemanticSearchService : IDisposable
 
     public void Dispose()
     {
-        _embeddingModel?.Dispose();
+        _embeddingGenerator?.Dispose();
         _store.Dispose();
         _gate.Dispose();
     }

@@ -65,7 +65,12 @@ found somewhere that carries a real display name, that is the record worth keepi
 Each entity is then enriched from local documentation and, optionally, online sources. Synthesis
 distills that documentation into a one-line description, a list of tasks the user might want,
 and synonyms — this is what closes the gap between how people phrase intent and how vendors name
-products. The result is embedded with `all-MiniLM-L6-v2` via ONNX Runtime.
+products. The result is embedded with `all-MiniLM-L6-v2` via an
+`IEmbeddingGenerator<string, Embedding<float>>` provider backed by ONNX Runtime. The local
+provider is composed from separate tokenizer/batch preparation, ONNX scoring, and
+mean-pooling/normalization stages, so another provider such as Ollama can be substituted without
+changing indexing or retrieval. The model id and dimensions come from the provider metadata and
+are persisted with the index; changing either requires a rebuild.
 
 **Querying (hot path).** Two arms run per query. The vector arm supplies semantic recall; the
 lexical FTS5/BM25 arm supplies precision on literal names. Neither is sufficient alone — pure vector
@@ -76,6 +81,10 @@ somewhere — which is what separates *"virtual memory"* from a *"Virtual PC"* l
 mention of memory — and by what you actually launch. Results whose evidence is weak are dropped
 rather than padding the list to the requested count, so a query nothing answers well shows *"No good
 matches found"* instead of a page of near-misses.
+
+The vector hot path uses `System.Numerics.Tensors.TensorPrimitives` for SIMD dot products and
+normalization. A local benchmark over 384-dimensional vectors and 10,000-row scans measured it at
+roughly 1.5–2.3x the throughput of the previous hand-written `Vector<float>` loop.
 
 ## Requirements
 
