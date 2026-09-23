@@ -358,13 +358,27 @@ public sealed class LearnEnricher : IEnricher
             var candidates = new List<(int Tier, LearnResult Result)>();
             var neighbourhood = new List<string>();
 
+            // A collector can name the publisher's canonical Learn article when it has an
+            // authoritative product catalogue. Trust that exact URL above TOC and search guesses.
+            // PowerToys uses this path because every utility is hosted by one executable and its
+            // official documentation is the utility-specific descriptive surface.
+            if (entity.RawMetadata.TryGetValue("learnArticle", out var officialArticle)
+                && Uri.TryCreate(officialArticle, UriKind.Absolute, out var officialUri)
+                && officialUri.Host.Equals("learn.microsoft.com", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add((SlugTier + 2, new LearnResult(entity.DisplayName, null, officialUri.GetLeftPart(UriPartial.Path))));
+            }
+
             // The publisher's own table of contents is consulted first and trusted above anything
             // search returns: an exact title match in a docset is a statement that this article is
             // about this tool, whereas a search hit is a guess. This is the only path that finds
             // Task Manager and much of Sysinternals at all.
-            var tocUrl = await _toc.FindAsync(entity.DisplayName, TocAliases(entity), cancellationToken).ConfigureAwait(false);
-            if (tocUrl is not null)
-                candidates.Add((SlugTier + 1, new LearnResult(entity.DisplayName, null, tocUrl)));
+            if (candidates.Count == 0)
+            {
+                var tocUrl = await _toc.FindAsync(entity.DisplayName, TocAliases(entity), cancellationToken).ConfigureAwait(false);
+                if (tocUrl is not null)
+                    candidates.Add((SlugTier + 1, new LearnResult(entity.DisplayName, null, tocUrl)));
+            }
 
             foreach (var query in BuildQueries(entity).Distinct(StringComparer.OrdinalIgnoreCase).Take(4))
             {

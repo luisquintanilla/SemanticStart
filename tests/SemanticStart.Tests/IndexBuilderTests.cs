@@ -75,6 +75,38 @@ public sealed class IndexBuilderTests : IDisposable
         Assert.Equal(3, (await store.GetAllAsync()).Count);
     }
 
+    [Fact]
+    public async Task Build_KeepsSuiteUtilitiesThatShareOneExecutableAndSettingsPage()
+    {
+        const string runner = @"C:\PowerToys\PowerToys.exe";
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["sharedLaunchTarget"] = "true",
+            ["targetPath"] = runner,
+        };
+        var utilities = new FakeCollector("powertoys",
+        [
+            Make("powertoys", "find-my-mouse", "Find My Mouse", EntityKind.Application, LaunchKind.Executable, runner) with
+            {
+                LaunchArguments = "--open-settings=MouseUtils",
+                RawMetadata = metadata,
+            },
+            Make("powertoys", "mouse-highlighter", "Mouse Highlighter", EntityKind.Application, LaunchKind.Executable, runner) with
+            {
+                LaunchArguments = "--open-settings=MouseUtils",
+                RawMetadata = metadata,
+            },
+        ]);
+
+        using var store = new SqliteIndexStore(DbPath, VectorPath);
+        var builder = new IndexBuilder([utilities], new FakeProfiler(), new FakeEmbeddings(), store);
+
+        var result = await builder.BuildAsync(IndexOptions.Default);
+
+        Assert.Equal(2, result.Discovered);
+        Assert.Equal(2, (await store.GetAllAsync()).Count);
+    }
+
     /// <summary>
     /// The kind of an entity records how it was found, not what it is, so it cannot be part of the
     /// question "are these the same program". Performance Monitor arrives from the AppsFolder as

@@ -349,7 +349,12 @@ public sealed class IndexBuilder
         // Arguments are part of the key because a shared executable does not imply a shared app:
         // shortcuts that launch rundll32.exe, control.exe, or msiexec.exe differ only in what they
         // are told to run, and collapsing those would erase genuinely distinct entries.
-        if (IsRunnableProgram(entity) && ExecutablePath(entity) is { } executable)
+        // Suite-hosted utilities can deliberately share one executable and even one settings
+        // page while remaining distinct tools. PowerToys Mouse Utilities are the concrete case:
+        // Find My Mouse, Mouse Highlighter, Mouse Jump, and Crosshairs all open MouseUtils.
+        if (IsRunnableProgram(entity)
+            && !entity.RawMetadata.ContainsKey("sharedLaunchTarget")
+            && ExecutablePath(entity) is { } executable)
         {
             keys.Add("exe|" + executable.ToLowerInvariant() + "|" + (entity.LaunchArguments ?? string.Empty).ToLowerInvariant());
         }

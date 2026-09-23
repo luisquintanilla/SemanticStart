@@ -59,12 +59,13 @@ First launch builds the index and downloads the embedding model once — see [Us
   <img alt="Indexing runs offline: collectors, enrichment, synthesis and embeddings build index.sqlite. Querying is local: Win+Alt+. runs a vector arm and a lexical BM25 arm in parallel over that index, fused by RRF into the overlay." src="docs/pipeline-light.svg">
 </picture>
 
-**Indexing (offline).** Nine collectors enumerate what is on the machine, in this order — the order
+**Indexing (offline).** Ten collectors enumerate what is on the machine, in this order — the order
 is deduplication precedence, so an earlier source wins when the same thing is found twice:
 
 | Collector | Source id | What it finds |
 |---|---|---|
 | `AppsFolderCollector` | `appsfolder` | AppsFolder entries: MSIX/UWP packages and Win32 apps alike |
+| `PowerToysCollector` | `powertoys` | Individual PowerToys utilities, enriched from their official Learn documentation |
 | `StartShortcutCollector` | `startmenu` | `.lnk` shortcuts in the per-user and all-users Start Menu |
 | `UninstallRegistryCollector` | `uninstall` | Installed programs registered under the uninstall keys |
 | `SettingsPageCollector` | `mssettings` | `ms-settings:` pages |

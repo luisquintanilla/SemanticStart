@@ -29,6 +29,7 @@ internal sealed class LearnTocCatalog
     /// </summary>
     private static readonly string[] TocRoots =
     [
+        "https://learn.microsoft.com/en-us/windows/powertoys/toc.json",
         "https://learn.microsoft.com/en-us/sysinternals/toc.json",
         "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/toc.json",
         "https://learn.microsoft.com/en-us/troubleshoot/windows-server/toc.json",

@@ -7,6 +7,7 @@ public static class CollectorRegistry
     public static IReadOnlyList<IEntityCollector> CreateAll() =>
     [
         new AppsFolderCollector(),
+        new PowerToysCollector(),
         new StartShortcutCollector(),
         new UninstallRegistryCollector(),
         new SettingsPageCollector(),
