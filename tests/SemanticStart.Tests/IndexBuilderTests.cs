@@ -107,6 +107,34 @@ public sealed class IndexBuilderTests : IDisposable
         Assert.Equal(2, (await store.GetAllAsync()).Count);
     }
 
+    [Fact]
+    public async Task Build_KeepsSameNamedProgramsFromDifferentDedupeScopes()
+    {
+        var appsFolder = new FakeCollector("appsfolder",
+        [
+            Make("appsfolder", "sysinternals-zoomit", "ZoomIt", EntityKind.Application, LaunchKind.AppsFolder),
+        ]);
+        var powerToys = new FakeCollector("powertoys",
+        [
+            Make("powertoys", "zoomit", "ZoomIt", EntityKind.Application, LaunchKind.Executable, @"C:\PowerToys\PowerToys.exe") with
+            {
+                LaunchArguments = "--open-settings=ZoomIt",
+                RawMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["dedupeScope"] = "Microsoft PowerToys",
+                },
+            },
+        ]);
+
+        using var store = new SqliteIndexStore(DbPath, VectorPath);
+        var builder = new IndexBuilder([appsFolder, powerToys], new FakeProfiler(), new FakeEmbeddings(), store);
+
+        var result = await builder.BuildAsync(IndexOptions.Default);
+
+        Assert.Equal(2, result.Discovered);
+        Assert.Equal(2, (await store.GetAllAsync()).Count);
+    }
+
     /// <summary>
     /// The kind of an entity records how it was found, not what it is, so it cannot be part of the
     /// question "are these the same program". Performance Monitor arrives from the AppsFolder as

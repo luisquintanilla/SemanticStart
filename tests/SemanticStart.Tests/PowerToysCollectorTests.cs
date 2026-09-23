@@ -25,6 +25,17 @@ public sealed class PowerToysCollectorTests : IDisposable
     }
 
     [Fact]
+    public async Task Collect_ScopesSameNamedStandaloneProductsSeparately()
+    {
+        var entities = await CollectAsync(CreateRunner());
+
+        var zoomIt = Assert.Single(entities, entity => entity.DisplayName == "ZoomIt");
+        var commandPalette = Assert.Single(entities, entity => entity.DisplayName == "Command Palette");
+        Assert.Equal("Microsoft PowerToys", zoomIt.RawMetadata["dedupeScope"]);
+        Assert.False(commandPalette.RawMetadata.ContainsKey("dedupeScope"));
+    }
+
+    [Fact]
     public async Task Collect_ProducesStableIdsAndHashes()
     {
         var runner = CreateRunner();

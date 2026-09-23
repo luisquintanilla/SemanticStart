@@ -19,7 +19,7 @@ public sealed class PowerToysCollector : IEntityCollector
         new("Awake", "Awake", "awake", "Keep the computer awake without changing its power settings."),
         new("Color Picker", "ColorPicker", "color-picker", "Pick a color from anywhere on the screen and copy it in a configurable format."),
         new("Command Not Found", "CommandNotFound", "cmd-not-found", "Suggest a WinGet package when a PowerShell command is not installed."),
-        new("Command Palette", "CmdPal", "command-palette/overview", "Search, launch, and control applications and commands from a customizable palette."),
+        new("Command Palette", "CmdPal", "command-palette/overview", "Search, launch, and control applications and commands from a customizable palette.", MergeWithStandaloneApp: true),
         new("Crop And Lock", "CropAndLock", "crop-and-lock", "Create a cropped view or interactive thumbnail of another window."),
         new("Cursor Wrap", "MouseUtils", "mouse-utilities", "Wrap the mouse pointer across screen edges."),
         new("Environment Variables", "EnvironmentVariables", "environment-variables", "Create and manage user and system environment variable profiles."),
@@ -74,6 +74,20 @@ public sealed class PowerToysCollector : IEntityCollector
             cancellationToken.ThrowIfCancellationRequested();
 
             var learnArticle = $"https://learn.microsoft.com/en-us/windows/powertoys/{utility.LearnPath}";
+            var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["description"] = utility.Description,
+                ["fileName"] = Path.GetFileName(runner),
+                ["learnArticle"] = learnArticle,
+                ["settingsPage"] = utility.SettingsPage,
+                ["sharedLaunchTarget"] = "true",
+                ["suite"] = "Microsoft PowerToys",
+                ["targetPath"] = runner,
+            };
+
+            if (!utility.MergeWithStandaloneApp)
+                metadata["dedupeScope"] = "Microsoft PowerToys";
+
             var entity = new Entity
             {
                 Id = EntityId.Create(Source, utility.DisplayName),
@@ -85,16 +99,7 @@ public sealed class PowerToysCollector : IEntityCollector
                 IconSource = runner,
                 Publisher = "Microsoft Corporation",
                 Source = Source,
-                RawMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    ["description"] = utility.Description,
-                    ["fileName"] = Path.GetFileName(runner),
-                    ["learnArticle"] = learnArticle,
-                    ["settingsPage"] = utility.SettingsPage,
-                    ["sharedLaunchTarget"] = "true",
-                    ["suite"] = "Microsoft PowerToys",
-                    ["targetPath"] = runner,
-                },
+                RawMetadata = metadata,
             };
 
             yield return CollectorEntity.WithContentHash(entity);
@@ -165,5 +170,7 @@ public sealed class PowerToysCollector : IEntityCollector
         }
     }
 
-    private sealed record PowerToy(string DisplayName, string SettingsPage, string LearnPath, string Description);
+    // Command Palette is also registered as its own package, so that app is the same product.
+    // ZoomIt is not: Sysinternals ships a separate standalone ZoomIt with the same name.
+    private sealed record PowerToy(string DisplayName, string SettingsPage, string LearnPath, string Description, bool MergeWithStandaloneApp = false);
 }

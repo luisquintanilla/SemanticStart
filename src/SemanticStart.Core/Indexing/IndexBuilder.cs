@@ -445,7 +445,12 @@ public sealed class IndexBuilder
         // snap-in pointing at perfmon.msc, so it was listed twice with two different descriptions
         // and no key in common. They are one thing to the user, and showing either twice in a row
         // looks broken.
-        ? "app|" + Normalize(entity.DisplayName)
+        //
+        // A dedupe scope separates same-named products from different suites: the PowerToys
+        // ZoomIt utility and the standalone Sysinternals ZoomIt app are distinct programs.
+        ? entity.RawMetadata.TryGetValue("dedupeScope", out var scope) && !string.IsNullOrWhiteSpace(scope)
+            ? "app|" + Normalize(scope) + "|" + Normalize(entity.DisplayName)
+            : "app|" + Normalize(entity.DisplayName)
         : entity.LaunchKind + "|" + entity.LaunchTarget + "|" + Normalize(entity.DisplayName);
 
     /// <summary>
