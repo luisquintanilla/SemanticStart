@@ -1,3 +1,4 @@
+using Microsoft.Extensions.AI;
 using SemanticStart.Core.Abstractions;
 using SemanticStart.Core.Embeddings;
 using SemanticStart.Core.Model;
@@ -13,7 +14,7 @@ public sealed class SemanticIndexRuntime : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private SqliteIndexStore? _store;
-    private MiniLmEmbeddingModel? _embeddings;
+    private IEmbeddingGenerator<string, Embedding<float>>? _embeddings;
     private HybridSearchEngine? _engine;
     private IReadOnlyList<IndexedEntity> _entities = [];
     private bool _disposed;
@@ -49,11 +50,15 @@ public sealed class SemanticIndexRuntime : IDisposable
                     "The local embedding model is missing. Start SemanticStart once to download and initialize it.");
             }
 
-            var embeddings = new MiniLmEmbeddingModel(files.ModelPath, files.VocabPath);
+            var embeddings = new OnnxEmbeddingGenerator(files.ModelPath, files.VocabPath);
             var store = new SqliteIndexStore();
             try
             {
-                await store.OpenReadOnlyAsync(embeddings.ModelId, embeddings.Dimensions, cancellationToken)
+                var metadata = embeddings.GetRequiredMetadata();
+                await store.OpenReadOnlyAsync(
+                        metadata.DefaultModelId!,
+                        metadata.DefaultModelDimensions!.Value,
+                        cancellationToken)
                     .ConfigureAwait(false);
                 var engine = new HybridSearchEngine(store, embeddings);
                 await engine.LoadAsync(cancellationToken).ConfigureAwait(false);

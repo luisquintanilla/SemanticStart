@@ -196,20 +196,10 @@ public sealed class IncrementalRefreshTests : IDisposable
         }
     }
 
-    private sealed class FakeEmbeddings : IEmbeddingModel
+    private sealed class FakeEmbeddings : TestEmbeddingGenerator
     {
-        public int Batches { get; private set; }
-        public int Dimensions => 4;
-        public string ModelId => "test-model";
-
-        public Task<IReadOnlyList<float[]>> EmbedAsync(
-            IReadOnlyList<string> texts, CancellationToken cancellationToken = default)
-        {
-            Batches++;
-            return Task.FromResult<IReadOnlyList<float[]>>([.. texts.Select(t => new[] { t.Length, 1f, 0f, 0f })]);
-        }
-
-        public void Dispose()
+        public FakeEmbeddings()
+            : base(text => [(float)text.Length, 1f, 0f, 0f])
         {
         }
     }

@@ -143,16 +143,10 @@ public sealed class SchemaUpgradeTests : IDisposable
                 }));
     }
 
-    private sealed class FakeEmbeddings : IEmbeddingModel
+    private sealed class FakeEmbeddings : TestEmbeddingGenerator
     {
-        public int Dimensions => 4;
-        public string ModelId => "test-model";
-
-        public Task<IReadOnlyList<float[]>> EmbedAsync(
-            IReadOnlyList<string> texts, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<float[]>>([.. texts.Select(_ => new[] { 1f, 0f, 0f, 0f })]);
-
-        public void Dispose()
+        public FakeEmbeddings()
+            : base(_ => [1f, 0f, 0f, 0f])
         {
         }
     }

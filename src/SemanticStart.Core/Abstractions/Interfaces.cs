@@ -52,24 +52,6 @@ public interface IProfileSynthesizer
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Produces L2-normalized sentence embeddings. Normalization is the implementation's
-/// responsibility so that the query engine can treat a dot product as cosine similarity.
-/// </summary>
-public interface IEmbeddingModel : IDisposable
-{
-    /// <summary>Dimensionality of the produced vectors (384 for all-MiniLM-L6-v2).</summary>
-    int Dimensions { get; }
-
-    /// <summary>Identifier of the model, persisted with the index so a model change forces a rebuild.</summary>
-    string ModelId { get; }
-
-    /// <summary>Embeds a batch. Batching matters: per-call ONNX overhead dominates for single strings.</summary>
-    Task<IReadOnlyList<float[]>> EmbedAsync(
-        IReadOnlyList<string> texts,
-        CancellationToken cancellationToken = default);
-}
-
 /// <summary>Executes a user query against the built index.</summary>
 public interface ISearchEngine
 {
