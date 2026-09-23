@@ -155,8 +155,8 @@ and attaches both signed zips and their SHA256 files to a GitHub Release. Pushin
 releases that version:
 
 ```powershell
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 It can also be run from the Actions tab against a version you name, which drafts the release
