@@ -28,7 +28,14 @@ public sealed record AppSettings
     internal static readonly string[] LegacyDefaultHotKeys = ["Alt+Space", "Win+Shift+S", "Win+Alt+S", "Win+Alt+Space"];
 
     public string HotKey { get; init; } = DefaultHotKey;
-    public bool AllowOnlineEnrichment { get; init; }
+
+    /// <summary>
+    /// On by default, matching first-run setup. Most installed programs describe themselves with
+    /// nothing but their own name, so without online documentation many tools can be found only
+    /// by users who already know what they are called. Only entity names are sent, and only while
+    /// indexing; search queries never leave the machine.
+    /// </summary>
+    public bool AllowOnlineEnrichment { get; init; } = true;
     public int ResultLimit { get; init; } = 8;
     public bool LaunchAtLogin { get; init; }
 

@@ -189,8 +189,10 @@ owner/repository IDs in that subject rather than the repository names. The profi
 
 ## Usage
 
-Run `SemanticStart.App.exe`. It lives in the tray, builds its index on first run (downloading the
-~90 MB embedding model once), and opens on **Win+Alt+.** — Win, Alt, and the period key.
+Run `SemanticStart.App.exe`. It lives in the tray and opens on **Win+Alt+.** — Win, Alt, and the
+period key. On first run a short setup dialog confirms the hotkey, whether to start at sign-in, and
+whether to look up documentation online while indexing (on by default), then builds the index
+(downloading the ~90 MB embedding model once). All three can be changed later in Settings.
 
 | Key | Action |
 |---|---|
@@ -388,8 +390,10 @@ paths or documents according to that model provider's privacy policy.
 ## Privacy
 
 Queries never leave the machine. The only network traffic is the one-time embedding model download
-and opt-in enrichment during indexing, which is cached to disk and can be disabled entirely; the
-index is fully functional without it. No inference of any kind leaves the machine.
+and online enrichment during indexing, which sends only app and feature names, is cached to disk,
+and is on by default but can be turned off in setup or Settings; the index is fully functional
+without it, just less able to find tools you cannot name. No inference of any kind leaves the
+machine.
 
 A built index is a list of what is installed on the machine that built it, so it is treated as local
 data: it lives in `%LOCALAPPDATA%\SemanticStart` and is ignored by source control.
