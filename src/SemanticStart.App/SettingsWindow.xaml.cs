@@ -88,15 +88,18 @@ public partial class SettingsWindow : Window
     /// First run shows the whole settings page rather than a separate setup dialog, because the
     /// build that follows opens this page for its progress anyway. Nothing is built until the user
     /// chooses Build index, and closing first keeps setup pending for the next launch.
+    ///
+    /// Build index takes Save's place in the footer rather than sitting in the Index card: a user
+    /// reviewing settings finishes with the footer's primary button, and when that button was Save
+    /// it confirmed the settings, built nothing, and left an app that finds nothing.
     /// </summary>
     private void EnterSetupMode()
     {
         _setupMode = true;
         Title = "Set up SemanticStart";
         SetupBanner.Visibility = Visibility.Visible;
-        RebuildButton.Content = "Build index";
-        RebuildButton.Style = (Style)FindResource("AccentButton");
-        SaveButton.Style = (Style)FindResource("FluentButton");
+        RebuildButton.Visibility = Visibility.Collapsed;
+        SaveButton.Content = "Build index";
 
         // Recommended defaults for a new install. Online lookup already defaults on; starting at
         // sign-in is what makes the hotkey work without remembering to launch anything.
@@ -111,13 +114,16 @@ public partial class SettingsWindow : Window
         _setupMode = false;
         Title = "SemanticStart Settings";
         SetupBanner.Visibility = Visibility.Collapsed;
-        RebuildButton.Content = "Rebuild index";
-        RebuildButton.Style = (Style)FindResource("FluentButton");
-        SaveButton.Style = (Style)FindResource("AccentButton");
+        RebuildButton.Visibility = Visibility.Visible;
+        SaveButton.Content = "Save";
+        UpdateSaveState();
     }
 
     /// <summary>Whether the window is showing first-run setup. Exposed for tests.</summary>
     internal bool IsSetupMode => _setupMode;
+
+    /// <summary>The footer's primary button label. Exposed for tests.</summary>
+    internal string PrimaryActionText => SaveButton.Content as string ?? string.Empty;
 
     private void OnRebuildStateChanged(object? sender, IndexRebuildState state) =>
         Dispatcher.BeginInvoke(() => ApplyRebuildState(state));
@@ -178,7 +184,7 @@ public partial class SettingsWindow : Window
     /// exception is a first run, where nothing has been written yet and confirming the defaults is
     /// a real action.
     /// </summary>
-    internal void UpdateSaveState() => SaveButton.IsEnabled = _dirty || !_settingsService.HasSavedSettings;
+    internal void UpdateSaveState() => SaveButton.IsEnabled = _setupMode || _dirty || !_settingsService.HasSavedSettings;
 
     /// <summary>
     /// What to say when the index holds nothing. Telling the user to rebuild while a rebuild is
@@ -187,7 +193,7 @@ public partial class SettingsWindow : Window
     internal static string EmptyIndexMessage(bool rebuilding, bool setup = false) => rebuilding
         ? "Index is empty. The build below is populating it."
         : setup
-            ? "Index is empty. Choose Build index below to create it."
+            ? "Index is empty. Choose Build index to create it."
             : "Index is empty. Rebuild to populate it.";
 
     /// <summary>Marks the form edited. Wired to every control that Save would persist.</summary>
@@ -387,6 +393,10 @@ public partial class SettingsWindow : Window
             IndexStatsText.Text = stats is null
                 ? "Reading index..."
                 : EmptyIndexMessage(_rebuilds.IsRunning, _setupMode);
+
+            // The idle status reads "Ready", which next to an empty index looks like a finished build.
+            if (stats is not null && ReferenceEquals(_rebuilds.State, IndexRebuildState.Idle))
+                ProgressText.Text = "Not built yet";
             return;
         }
 
@@ -463,8 +473,14 @@ public partial class SettingsWindow : Window
 
     private async void RebuildButton_Click(object sender, RoutedEventArgs e) => await RebuildIndexAsync(force: true);
 
-    private void SaveButton_Click(object sender, RoutedEventArgs e)
+    private async void SaveButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_setupMode)
+        {
+            await RebuildIndexAsync(force: true);
+            return;
+        }
+
         SaveFromControls();
         if (!_rebuilds.IsRunning)
             ProgressText.Text = "Settings saved.";

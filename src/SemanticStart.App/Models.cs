@@ -254,6 +254,12 @@ public sealed class OverlayViewModel : ObservableObject
     /// </summary>
     private const string NoMatchStatus = "No good matches found";
 
+    /// <summary>
+    /// Shown instead of <see cref="NoMatchStatus"/> when there is nothing to search. "No good
+    /// matches" for every query reads as a broken search rather than a missing index.
+    /// </summary>
+    internal const string EmptyIndexStatus = "The index hasn't been built yet. Open Settings from the tray icon and choose Build index.";
+
     private readonly SemanticSearchService _searchService;
     private readonly IconProvider _iconProvider;
     private readonly AppSettings _settings;
@@ -355,7 +361,9 @@ public sealed class OverlayViewModel : ObservableObject
             _resultsQuery = query;
             SelectedIndex = Results.Count > 0 ? 0 : -1;
             IsResultsActive = false;
-            Status = Results.Count == 0 ? (string.IsNullOrWhiteSpace(query) ? IdleStatus : NoMatchStatus) : string.Empty;
+            Status = Results.Count == 0
+                ? string.IsNullOrWhiteSpace(query) ? IdleStatus : _searchService.Count == 0 ? EmptyIndexStatus : NoMatchStatus
+                : string.Empty;
             _ = LoadIconsAsync(cancellationToken);
         }
         catch (OperationCanceledException)

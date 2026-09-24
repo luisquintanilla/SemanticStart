@@ -242,7 +242,7 @@ public partial class App : System.Windows.Application
             {
                 // First run opens settings in setup mode and builds only when the user asks, so
                 // every choice that shapes the first index is visible before it is made.
-                Dispatcher.Invoke(() => ShowSettingsWindow(setupMode: true));
+                Dispatcher.Invoke(() => ShowSettingsWindow());
                 return;
             }
 
@@ -262,13 +262,16 @@ public partial class App : System.Windows.Application
     /// means whichever is closed last wins, and the progress of a rebuild appears in only one of
     /// them.
     /// </summary>
-    private SettingsWindow ShowSettingsWindow(bool setupMode = false)
+    private SettingsWindow ShowSettingsWindow()
     {
         if (_settingsService is null || _searchService is null || _activationManager is null || _rebuilds is null)
             throw new InvalidOperationException("Application services are not ready.");
 
         if (_settingsWindow is null)
         {
+            // Until the first build, every way into settings is a way into setup, so the page leads
+            // with Build index wherever the user opened it from.
+            var setupMode = !_settingsService.Load().SetupCompleted && _searchService.Count == 0 && !_rebuilds.IsRunning;
             _settingsWindow = new SettingsWindow(_settingsService, _searchService, _activationManager, _rebuilds, setupMode);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             _settingsWindow.Show();

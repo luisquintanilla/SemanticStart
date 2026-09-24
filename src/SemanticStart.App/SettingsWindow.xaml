@@ -111,7 +111,7 @@
                     <StackPanel>
                         <TextBlock Text="Welcome to SemanticStart" FontWeight="SemiBold" />
                         <TextBlock Style="{StaticResource Caption}"
-                                   Text="SemanticStart builds a searchable index of your apps, settings, and built-in Windows tools so you can find them by describing what you want. Review the settings below, then choose Build index. Indexing takes about a minute and runs in the background. Your Start menu is not modified." />
+                                   Text="SemanticStart builds a searchable index of your apps, settings, and built-in Windows tools so you can find them by describing what you want. Review the settings below, then choose Build index. Indexing takes a few minutes and runs in the background. Your Start menu is not modified." />
                     </StackPanel>
                 </Border>
 

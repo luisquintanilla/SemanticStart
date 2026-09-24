@@ -102,7 +102,8 @@ public class SettingsWindowSmokeTests
                 };
                 setupWindow.Show();
                 Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Loaded);
-                setupRendered = setupWindow.IsSetupMode && setupWindow.Title.Contains("Set up");
+                setupRendered = setupWindow.IsSetupMode && setupWindow.Title.Contains("Set up")
+                    && setupWindow.PrimaryActionText == "Build index" && setupWindow.IsSaveEnabled;
                 setupWindow.Close();
             }
             catch (Exception ex)
@@ -133,7 +134,7 @@ public class SettingsWindowSmokeTests
 
         Assert.True(saveEnabledAfterEdit, "Save stayed disabled after a setting was changed, so the change cannot be committed.");
         Assert.False(backgroundNoteVisibleWhenIdle, "The 'indexing runs in the background' note showed with no rebuild running.");
-        Assert.True(setupRendered, "The settings window did not render in first-run setup mode.");
+        Assert.True(setupRendered, "First-run setup did not render with Build index as the footer's primary action.");
     }
 
     /// <summary>
