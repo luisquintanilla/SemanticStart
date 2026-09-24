@@ -75,9 +75,13 @@
         </StackPanel>
 
         <Grid Grid.Row="2" Margin="0,10,0,0">
-            <TextBlock x:Name="EstimateText" Style="{StaticResource Caption}" VerticalAlignment="Center"
-                       HorizontalAlignment="Left" MaxWidth="330" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="EstimateText" Grid.Column="0" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                       Margin="0,0,12,0" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="SkipButton" Content="Skip for now" Style="{StaticResource FluentButton}"
                         Margin="0,0,8,0" Click="SkipButton_Click" />
                 <Button x:Name="BuildButton" Content="Build index" Style="{StaticResource AccentButton}"
