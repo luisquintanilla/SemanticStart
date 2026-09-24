@@ -240,9 +240,10 @@ public partial class App : System.Windows.Application
 
             if (!settings.SetupCompleted)
             {
-                var buildNow = RunFirstRunSetup(settings);
-                if (buildNow != true)
-                    return;
+                // First run opens settings in setup mode and builds only when the user asks, so
+                // every choice that shapes the first index is visible before it is made.
+                Dispatcher.Invoke(() => ShowSettingsWindow(setupMode: true));
+                return;
             }
 
             await RebuildIndexFromTrayAsync();
@@ -254,28 +255,6 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>
-    /// Offers the choices that shape the first index before it is built, since rebuilding to change
-    /// them costs minutes. Returns null if the user dismissed setup without answering, in which case
-    /// nothing is indexed and the tray icon is left to start it.
-    /// </summary>
-    private bool? RunFirstRunSetup(AppSettings settings)
-    {
-        if (_settingsService is null || _searchService is null)
-            return null;
-
-        return Dispatcher.Invoke(() =>
-        {
-            var window = new FirstRunWindow(settings, _activationManager?.ActiveHotKey);
-            if (window.ShowDialog() != true)
-                return (bool?)null;
-
-            _settingsService.Save(window.Result);
-            _activationManager?.ApplySettings(window.Result);
-            return window.BuildRequested;
-        });
-    }
-
-    /// <summary>
     /// Shows the settings window, reusing the one already open.
     ///
     /// There are three ways in - the tray menu, the overlay's gear, and a tray rebuild - and each
@@ -283,14 +262,14 @@ public partial class App : System.Windows.Application
     /// means whichever is closed last wins, and the progress of a rebuild appears in only one of
     /// them.
     /// </summary>
-    private SettingsWindow ShowSettingsWindow()
+    private SettingsWindow ShowSettingsWindow(bool setupMode = false)
     {
         if (_settingsService is null || _searchService is null || _activationManager is null || _rebuilds is null)
             throw new InvalidOperationException("Application services are not ready.");
 
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(_settingsService, _searchService, _activationManager, _rebuilds);
+            _settingsWindow = new SettingsWindow(_settingsService, _searchService, _activationManager, _rebuilds, setupMode);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             _settingsWindow.Show();
         }

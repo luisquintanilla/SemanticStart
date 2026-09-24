@@ -190,9 +190,10 @@ owner/repository IDs in that subject rather than the repository names. The profi
 ## Usage
 
 Run `SemanticStart.App.exe`. It lives in the tray and opens on **Win+Alt+.** — Win, Alt, and the
-period key. On first run a short setup dialog confirms the hotkey, whether to start at sign-in, and
-whether to look up documentation online while indexing (on by default), then builds the index
-(downloading the ~90 MB embedding model once). All three can be changed later in Settings.
+period key. On first run the Settings window opens in setup mode so you can review the hotkey,
+whether to start at sign-in, and whether to look up documentation online while indexing (on by
+default); choosing **Build index** builds the index (downloading the ~90 MB embedding model once).
+Everything can be changed later in Settings.
 
 | Key | Action |
 |---|---|

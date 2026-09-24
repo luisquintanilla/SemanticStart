@@ -105,6 +105,16 @@
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
             <StackPanel>
+                <!-- First run only. The first index is the expensive one, so its choices are shown
+                     here before anything is built, and building waits for the button below. -->
+                <Border x:Name="SetupBanner" Style="{StaticResource Card}" Visibility="Collapsed" Margin="0,0,0,4">
+                    <StackPanel>
+                        <TextBlock Text="Welcome to SemanticStart" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Caption}"
+                                   Text="SemanticStart builds a searchable index of your apps, settings, and built-in Windows tools so you can find them by describing what you want. Review the settings below, then choose Build index. Indexing takes about a minute and runs in the background. Your Start menu is not modified." />
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="Activation" Style="{StaticResource SectionHeader}" />
 
                 <Border Style="{StaticResource Card}">
@@ -137,9 +147,9 @@
 
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <CheckBox x:Name="OnlineBox" Content="Allow online enrichment while indexing" Checked="Setting_Changed" Unchecked="Setting_Changed" />
+                        <CheckBox x:Name="OnlineBox" Content="Look up documentation online while indexing" Checked="Setting_Changed" Unchecked="Setting_Changed" />
                         <TextBlock Style="{StaticResource Caption}"
-                                   Text="Fetches public documentation to improve descriptions. Searches always stay on this device; only indexing touches the network, and results are cached." />
+                                   Text="Most installed programs describe themselves with nothing but their own name, so without this many tools can only be found if you already know what they are called. Only app and feature names are sent, only while indexing, and results are cached. What you type when searching never leaves this device." />
                     </StackPanel>
                 </Border>
 

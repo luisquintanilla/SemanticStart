@@ -14,12 +14,14 @@ public partial class SettingsWindow : Window
     private AppSettings _settings;
     private bool _dirty;
     private bool _loading;
+    private bool _setupMode;
 
     public SettingsWindow(
         AppSettingsService settingsService,
         SemanticSearchService searchService,
         ActivationManager activationManager,
-        IndexRebuildCoordinator rebuilds)
+        IndexRebuildCoordinator rebuilds,
+        bool setupMode = false)
     {
         InitializeComponent();
         ThemeService.Refresh();
@@ -31,6 +33,8 @@ public partial class SettingsWindow : Window
         _settings = settingsService.Load();
         VersionText.Text = $"SemanticStart {ProductVersion}";
         LoadControls();
+        if (setupMode)
+            EnterSetupMode();
 
         // The window can open while a rebuild is already running - the tray starts one, and so does
         // first run - so it adopts the current state rather than assuming it is idle.
@@ -70,9 +74,50 @@ public partial class SettingsWindow : Window
     /// </summary>
     public Task RebuildIndexAsync(bool force)
     {
+        if (_setupMode)
+        {
+            _settings = _settings with { SetupCompleted = true };
+            ExitSetupMode();
+        }
+
         SaveFromControls();
         return _rebuilds.StartAsync(_settings, force);
     }
+
+    /// <summary>
+    /// First run shows the whole settings page rather than a separate setup dialog, because the
+    /// build that follows opens this page for its progress anyway. Nothing is built until the user
+    /// chooses Build index, and closing first keeps setup pending for the next launch.
+    /// </summary>
+    private void EnterSetupMode()
+    {
+        _setupMode = true;
+        Title = "Set up SemanticStart";
+        SetupBanner.Visibility = Visibility.Visible;
+        RebuildButton.Content = "Build index";
+        RebuildButton.Style = (Style)FindResource("AccentButton");
+        SaveButton.Style = (Style)FindResource("FluentButton");
+
+        // Recommended defaults for a new install. Online lookup already defaults on; starting at
+        // sign-in is what makes the hotkey work without remembering to launch anything.
+        _loading = true;
+        LoginBox.IsChecked = true;
+        _loading = false;
+        UpdateSaveState();
+    }
+
+    private void ExitSetupMode()
+    {
+        _setupMode = false;
+        Title = "SemanticStart Settings";
+        SetupBanner.Visibility = Visibility.Collapsed;
+        RebuildButton.Content = "Rebuild index";
+        RebuildButton.Style = (Style)FindResource("FluentButton");
+        SaveButton.Style = (Style)FindResource("AccentButton");
+    }
+
+    /// <summary>Whether the window is showing first-run setup. Exposed for tests.</summary>
+    internal bool IsSetupMode => _setupMode;
 
     private void OnRebuildStateChanged(object? sender, IndexRebuildState state) =>
         Dispatcher.BeginInvoke(() => ApplyRebuildState(state));
@@ -139,9 +184,11 @@ public partial class SettingsWindow : Window
     /// What to say when the index holds nothing. Telling the user to rebuild while a rebuild is
     /// running contradicts the progress bar directly below and points at a disabled button.
     /// </summary>
-    internal static string EmptyIndexMessage(bool rebuilding) => rebuilding
+    internal static string EmptyIndexMessage(bool rebuilding, bool setup = false) => rebuilding
         ? "Index is empty. The build below is populating it."
-        : "Index is empty. Rebuild to populate it.";
+        : setup
+            ? "Index is empty. Choose Build index below to create it."
+            : "Index is empty. Rebuild to populate it.";
 
     /// <summary>Marks the form edited. Wired to every control that Save would persist.</summary>
     internal void MarkDirty(object? sender = null, EventArgs? e = null)
@@ -339,7 +386,7 @@ public partial class SettingsWindow : Window
             // directly below it and points at a button that is disabled for the duration.
             IndexStatsText.Text = stats is null
                 ? "Reading index..."
-                : EmptyIndexMessage(_rebuilds.IsRunning);
+                : EmptyIndexMessage(_rebuilds.IsRunning, _setupMode);
             return;
         }
 

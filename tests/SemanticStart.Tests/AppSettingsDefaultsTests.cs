@@ -10,7 +10,7 @@ public sealed class AppSettingsDefaultsTests
 
     /// <summary>
     /// A settings file written before the option existed, or an index built without first-run
-    /// setup, must get the same default the setup dialog offers rather than silently indexing
+    /// setup, must get the same default first-run setup offers rather than silently indexing
     /// offline.
     /// </summary>
     [Fact]

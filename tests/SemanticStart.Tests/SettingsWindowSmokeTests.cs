@@ -28,6 +28,7 @@ public class SettingsWindowSmokeTests
         var backgroundNoteVisibleWhenIdle = true;
         (int Lines, int BoldValues) statsShape = default;
         var statsHasSummaryRule = false;
+        var setupRendered = false;
 
         var thread = new Thread(() =>
         {
@@ -88,6 +89,21 @@ public class SettingsWindowSmokeTests
                 backgroundNoteVisibleWhenIdle = window.IsBackgroundNoteVisible;
 
                 window.Close();
+
+                // First run uses this same window in setup mode; it has to render with the welcome
+                // banner and the Build index action rather than failing on a style lookup.
+                var setupWindow = new SettingsWindow(settingsService, searchService, activation, rebuilds, setupMode: true)
+                {
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = -32000,
+                    Top = -32000,
+                    ShowActivated = false,
+                    ShowInTaskbar = false,
+                };
+                setupWindow.Show();
+                Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Loaded);
+                setupRendered = setupWindow.IsSetupMode && setupWindow.Title.Contains("Set up");
+                setupWindow.Close();
             }
             catch (Exception ex)
             {
@@ -117,6 +133,7 @@ public class SettingsWindowSmokeTests
 
         Assert.True(saveEnabledAfterEdit, "Save stayed disabled after a setting was changed, so the change cannot be committed.");
         Assert.False(backgroundNoteVisibleWhenIdle, "The 'indexing runs in the background' note showed with no rebuild running.");
+        Assert.True(setupRendered, "The settings window did not render in first-run setup mode.");
     }
 
     /// <summary>
@@ -131,5 +148,6 @@ public class SettingsWindowSmokeTests
         var running = SettingsWindow.EmptyIndexMessage(rebuilding: true);
         Assert.DoesNotContain("Rebuild to populate", running, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("populating", running, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Build index", SettingsWindow.EmptyIndexMessage(rebuilding: false, setup: true));
     }
 }
