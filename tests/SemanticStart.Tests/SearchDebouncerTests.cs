@@ -30,8 +30,10 @@ public sealed class SearchDebouncerTests
     public async Task ReschedulingAbandonsTheRunThatWasWaiting()
     {
         var runs = 0;
-        var debouncer = new SearchDebouncer(Interval, NotHeld);
+        var debouncer = new SearchDebouncer(RescheduleInterval, NotHeld);
 
+        // Rescheduled with no delay between calls, and with an interval far longer than a slow
+        // runner can stall a tight loop, so no earlier run can legitimately expire first.
         for (var i = 0; i < 5; i++)
         {
             debouncer.Schedule(_ =>
@@ -39,13 +41,13 @@ public sealed class SearchDebouncerTests
                 Interlocked.Increment(ref runs);
                 return Task.CompletedTask;
             });
-
-            await Task.Delay(15);
         }
 
-        await Task.Delay(Interval * 6);
+        await Task.Delay(RescheduleInterval * 4);
         Assert.Equal(1, runs);
     }
+
+    private static readonly TimeSpan RescheduleInterval = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
     /// The reported defect. Windows starts repeating a held key after 500 ms by default, which is

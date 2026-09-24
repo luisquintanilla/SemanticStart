@@ -5,26 +5,38 @@
 # artifacts/ is gitignored on purpose, and a repository that carries its own build output pays
 # that cost on every clone forever.
 #
-# Two ways in. Pushing a v* tag releases that version, which is the normal path. Running it by
-# hand builds the same thing for a version you name, so a release can be rehearsed - or reissued
-# after a bad one - without inventing a throwaway tag.
+# Every push to main builds, tests, signs, and publishes a release. The version comes from
+# Directory.Build.props: its major.minor is the release line, and the patch is bumped past the
+# highest v<major>.<minor>.* tag already released. Changing the props version (for example to
+# 1.2.0) starts a new line at exactly that version. Running it by hand can name a version
+# explicitly, and can draft the release instead of publishing it.
 name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+    # Documentation-only changes do not change the binary, so they do not cut a release.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to build and release, without the leading v (e.g. 1.0.0)"
-        required: true
+        description: "Version to release, without the leading v (e.g. 1.1.3). Blank bumps the patch."
+        required: false
         type: string
       draft:
         description: "Create the release as a draft"
         required: false
         type: boolean
-        default: true
+        default: false
+
+# Two overlapping runs would compute the same next patch and race to create one tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 # The job creates a release, which is a write to the repository.
 permissions:
@@ -35,7 +47,7 @@ jobs:
   release:
     # WPF, and the app is Windows-only. There is no cross-compilation route for this target.
     runs-on: windows-latest
-    # Gives OIDC one stable, environment-bound subject for tag and manual runs. GitHub emits this
+    # Gives OIDC one stable, environment-bound subject for main and manual runs. GitHub emits this
     # repository's immutable owner/repository IDs in the token rather than its renameable names.
     environment: release
 
@@ -77,20 +89,36 @@ jobs:
           # a wildcard within the major version so patch updates are picked up without edits.
           dotnet-version: "10.0.x"
 
-      # A tag is the source of truth when there is one; the manual input is the fallback. Failing
-      # loudly on an empty result matters because every later step would otherwise succeed and
-      # produce an asset named after nothing.
+      # An explicit manual version wins. Otherwise the props version is used as-is when its
+      # major.minor line has no release yet, and the next unused patch when it does. Tags are read
+      # from the remote rather than the shallow checkout, which fetches none.
       - name: Resolve version
         id: version
         shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          if ($env:GITHUB_REF -like 'refs/tags/v*') {
-            $version = $env:GITHUB_REF -replace '^refs/tags/v', ''
-          } else {
-            $version = '${{ inputs.version }}'
+          $version = "$env:REQUESTED_VERSION".Trim()
+
+          if (-not $version) {
+            [xml]$props = Get-Content Directory.Build.props
+            $base = "$($props.Project.PropertyGroup.Version)".Trim()
+            if (-not ($base -match '^(\d+)\.(\d+)\.(\d+)$')) {
+              throw "Directory.Build.props Version '$base' must be major.minor.patch."
+            }
+
+            $major, $minor, $patch = [int]$Matches[1], [int]$Matches[2], [int]$Matches[3]
+            $released = @(git ls-remote --tags origin "refs/tags/v$major.$minor.*" |
+              ForEach-Object { if ($_ -match "refs/tags/v$major\.$minor\.(\d+)$") { [int]$Matches[1] } })
+            if ($LASTEXITCODE -ne 0) { throw "Could not list tags from origin." }
+
+            if ($released.Count -gt 0) {
+              $patch = [math]::Max($patch, ($released | Measure-Object -Maximum).Maximum + 1)
+            }
+
+            $version = "$major.$minor.$patch"
           }
 
-          $version = $version.Trim()
           if (-not ($version -match '^\d+\.\d+\.\d+(\.\d+)?(-[0-9A-Za-z.-]+)?$')) {
             throw "Version '$version' is not a valid semantic version."
           }
@@ -297,8 +325,8 @@ jobs:
 
           if ('${{ inputs.draft }}' -eq 'true') { $releaseArgs += '--draft' }
 
-          # A manual run has no tag behind it, so gh is told which commit to tag.
-          if ($env:GITHUB_REF -notlike 'refs/tags/*') { $releaseArgs += @('--target', $env:GITHUB_SHA) }
+          # The tag does not exist yet; gh creates it on the commit that was built.
+          $releaseArgs += @('--target', $env:GITHUB_SHA)
 
           # Exit code rather than output: gh prints to stderr when a release is missing, and an
           # empty-string result would be indistinguishable from a genuine failure to reach it.

@@ -151,16 +151,18 @@ unit that ships, not just the exe.
 ### Releasing
 
 `.github/workflows/release.yml` builds AMD64 and ARM64 packages on a clean runner, runs the tests,
-and attaches both signed zips and their SHA256 files to a GitHub Release. Pushing a `v*` tag
-releases that version:
+and attaches both signed zips and their SHA256 files to a GitHub Release. Every push to `main`
+that changes more than documentation cuts a release. The patch version is bumped automatically:
+`Directory.Build.props` names the release line (`1.1.0` releases `v1.1.0`, then `v1.1.1`,
+`v1.1.2`, …), so to start a new line change it, for example to `1.2.0`:
 
-```powershell
-git tag v1.1.0
-git push origin v1.1.0
+```xml
+<Version>1.2.0</Version>
 ```
 
-It can also be run from the Actions tab against a version you name, which drafts the release
-instead of publishing it — useful for rehearsing a release, or reissuing one after a bad build.
+It can also be run from the Actions tab, optionally naming an exact version or drafting the
+release instead of publishing it — useful for rehearsing a release, or reissuing one after a bad
+build.
 
 #### Code signing
 
