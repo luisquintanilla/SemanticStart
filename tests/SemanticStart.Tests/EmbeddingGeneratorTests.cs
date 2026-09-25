@@ -7,6 +7,7 @@ namespace SemanticStart.Tests;
 public sealed class EmbeddingGeneratorTests
 {
     private const string FixtureModelId = "tokenizer-fixture";
+    // The fixture maps each input token ID to [id, 1]; the provider applies attention masks and pooling.
     private static string FixtureModelPath => Path.Combine(AppContext.BaseDirectory, "Fixtures", "tokenizer-embedding.onnx");
 
     [Fact]
