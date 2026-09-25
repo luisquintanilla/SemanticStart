@@ -148,6 +148,52 @@ Use `-r win-arm64` for the ARM64 build.
 ONNX Runtime, the SQLite engine, WPF's unmanaged libraries — beside it, so the whole folder is the
 unit that ships, not just the exe.
 
+### Custom tokenizers
+
+`OnnxEmbeddingGenerator` keeps the vocabulary-path constructor for the default uncased BERT
+tokenizer:
+
+```csharp
+using SemanticStart.Core.Embeddings;
+
+using var generator = new OnnxEmbeddingGenerator(modelPath, vocabPath);
+```
+
+An overload accepts `Microsoft.ML.Tokenizers.Tokenizer`, including your own subclass:
+
+```csharp
+using Microsoft.ML.Tokenizers;
+using SemanticStart.Core.Embeddings;
+
+Tokenizer tokenizer = BertTokenizer.Create(
+    vocabPath, new BertOptions { LowerCaseBeforeTokenization = true });
+using var generator = new OnnxEmbeddingGenerator(modelPath, tokenizer);
+```
+
+The supplied tokenizer owns its vocabulary and configuration, so the injection overload does not
+take a vocabulary path. Both constructors retain the optional `modelId` and `dimensions` arguments.
+For a custom subclass, implement the protected encoding hooks rather than hiding the public
+encoding methods: calls through `Tokenizer` must reach your implementation.
+
+This is a tokenization extension point, not support for arbitrary ONNX architectures. The
+tokenizer must match the model's vocabulary and produce complete input sequences, including any
+required special tokens, within **256 tokens**. Batches retain right padding with token ID zero,
+attention masks based on actual sequence lengths, and single-sequence token-type IDs of zero
+when the model declares that input. Normalization and pre-tokenization are enabled through the
+tokenizer API, but their implementation belongs to the supplied tokenizer.
+
+Stock `BertTokenizer` instances retain `[CLS]` and `[SEP]` handling, including space for both
+within the token limit. This is handled explicitly because the library's BERT encoding methods
+hide the base methods. Other implementations' IDs are used as returned; the generator does not
+add another set of special tokens. Returning more than the requested limit raises an
+`InvalidOperationException` rather than silently truncating a potentially required end token.
+
+The generator does not dispose an injected tokenizer. Callers own its lifetime and must provide
+a thread-safe implementation or serialize generation calls. Changing effective tokenization
+changes embeddings and requires rebuilding an existing index. Index compatibility tracks model
+ID and dimensions, not tokenizer identity, so use a distinct `modelId` for a different encoding
+configuration; tokenizer changes are not detected automatically.
+
 ### Releasing
 
 `.github/workflows/release.yml` builds AMD64 and ARM64 packages on a clean runner, runs the tests,
