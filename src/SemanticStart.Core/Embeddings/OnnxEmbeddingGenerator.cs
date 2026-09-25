@@ -88,7 +88,7 @@ public sealed class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embeddi
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken)
     {
-        var tokenized = TokenBatcher.Tokenize(_tokenizer, texts, _scorer.HasTokenTypeIds, cancellationToken);
+        var tokenized = _tokenizer.CreateOnnxBatch(texts, _scorer.HasTokenTypeIds, cancellationToken);
         var hiddenStates = _scorer.Score(tokenized, cancellationToken);
         var vectors = EmbeddingPooling.MeanPoolAndNormalize(hiddenStates, tokenized);
 

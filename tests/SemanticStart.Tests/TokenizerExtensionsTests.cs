@@ -3,7 +3,7 @@ using SemanticStart.Core.Embeddings;
 
 namespace SemanticStart.Tests;
 
-public sealed class TokenBatcherTests
+public sealed class TokenizerExtensionsTests
 {
     [Theory]
     [InlineData("", new long[] { 2, 3 })]
@@ -14,12 +14,12 @@ public sealed class TokenBatcherTests
     [InlineData("\u4e2d\u6587", new long[] { 2, 10, 11, 3 })]
     [InlineData("unlisted", new long[] { 2, 1, 3 })]
     [InlineData("[MASK]", new long[] { 2, 4, 3 })]
-    public void Tokenize_Bert_PreservesDefaultEncoding(string text, long[] expected)
+    public void CreateOnnxBatch_Bert_PreservesDefaultEncoding(string text, long[] expected)
     {
         using var vocab = new TestBertVocabulary();
         Tokenizer tokenizer = vocab.CreateTokenizer();
 
-        var batch = TokenBatcher.Tokenize(tokenizer, [text], false, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch([text], false, CancellationToken.None);
 
         Assert.Equal(expected, batch.InputIds);
         Assert.Equal(Enumerable.Repeat(1L, expected.Length), batch.AttentionMask);
@@ -31,12 +31,12 @@ public sealed class TokenBatcherTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Tokenize_Bert_PadsUnequalSequencesAndTreatsNullAsEmpty(bool includeTokenTypeIds)
+    public void CreateOnnxBatch_Bert_PadsUnequalSequencesAndTreatsNullAsEmpty(bool includeTokenTypeIds)
     {
         using var vocab = new TestBertVocabulary();
         Tokenizer tokenizer = vocab.CreateTokenizer();
 
-        var batch = TokenBatcher.Tokenize(tokenizer, ["hello world", "hello", null!], includeTokenTypeIds, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch(["hello world", "hello", null!], includeTokenTypeIds, CancellationToken.None);
 
         Assert.Equal(new long[] { 2, 5, 6, 3, 2, 5, 3, 0, 2, 3, 0, 0 }, batch.InputIds);
         Assert.Equal(new long[] { 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0 }, batch.AttentionMask);
@@ -53,14 +53,14 @@ public sealed class TokenBatcherTests
     [InlineData(254)]
     [InlineData(255)]
     [InlineData(400)]
-    public void Tokenize_Bert_ReservesSpaceForSpecialTokensAtLimit(int contentTokens)
+    public void CreateOnnxBatch_Bert_ReservesSpaceForSpecialTokensAtLimit(int contentTokens)
     {
         using var vocab = new TestBertVocabulary();
         Tokenizer tokenizer = vocab.CreateTokenizer();
         var text = string.Join(' ', Enumerable.Repeat("hello", contentTokens));
         long[] expected = [2, .. Enumerable.Repeat(5L, Math.Min(contentTokens, 254)), 3];
 
-        var batch = TokenBatcher.Tokenize(tokenizer, [text], false, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch([text], false, CancellationToken.None);
 
         Assert.Equal(expected, batch.InputIds);
         Assert.Equal(Enumerable.Repeat(1L, expected.Length), batch.AttentionMask);
@@ -69,12 +69,12 @@ public sealed class TokenBatcherTests
     }
 
     [Fact]
-    public void Tokenize_InjectedBert_PreservesItsNormalizationSettings()
+    public void CreateOnnxBatch_InjectedBert_PreservesItsNormalizationSettings()
     {
         using var vocab = new TestBertVocabulary();
         Tokenizer tokenizer = vocab.CreateTokenizer(lowerCase: false);
 
-        var batch = TokenBatcher.Tokenize(tokenizer, ["HELLO"], false, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch(["HELLO"], false, CancellationToken.None);
 
         Assert.Equal(new long[] { 2, 1, 3 }, batch.InputIds);
         Assert.Equal(new long[] { 1, 1, 1 }, batch.AttentionMask);
@@ -83,12 +83,12 @@ public sealed class TokenBatcherTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Tokenize_CustomTokenizer_UsesVirtualHookAndPreservesIds(bool includeTokenTypeIds)
+    public void CreateOnnxBatch_CustomTokenizer_UsesVirtualHookAndPreservesIds(bool includeTokenTypeIds)
     {
         using var custom = new RecordingTokenizer(text => text == "CAF\u00c9" ? [90, 0, 91] : [40]);
         Tokenizer tokenizer = custom;
 
-        var batch = TokenBatcher.Tokenize(tokenizer, ["CAF\u00c9", "\u4e2d"], includeTokenTypeIds, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch(["CAF\u00c9", "\u4e2d"], includeTokenTypeIds, CancellationToken.None);
 
         Assert.Equal(new long[] { 90, 0, 91, 40, 0, 0 }, batch.InputIds);
         Assert.Equal(new long[] { 1, 1, 1, 1, 0, 0 }, batch.AttentionMask);
@@ -104,12 +104,12 @@ public sealed class TokenBatcherTests
     }
 
     [Fact]
-    public void Tokenize_CustomTokenizer_AllowsExactlyTheTokenBudget()
+    public void CreateOnnxBatch_CustomTokenizer_AllowsExactlyTheTokenBudget()
     {
         int[] ids = [90, .. Enumerable.Repeat(7, 254), 91];
         using var tokenizer = new RecordingTokenizer(_ => ids);
 
-        var batch = TokenBatcher.Tokenize(tokenizer, ["text"], false, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch(["text"], false, CancellationToken.None);
 
         Assert.Equal(ids.Select(id => (long)id), batch.InputIds);
         Assert.Equal(Enumerable.Repeat(1L, 256), batch.AttentionMask);
@@ -117,13 +117,13 @@ public sealed class TokenBatcherTests
     }
 
     [Fact]
-    public void Tokenize_CustomTokenizer_RejectsOverBudgetOutputWithoutExposingText()
+    public void CreateOnnxBatch_CustomTokenizer_RejectsOverBudgetOutputWithoutExposingText()
     {
         const string privateText = "private input";
         using var tokenizer = new RecordingTokenizer(text => text == privateText ? new int[257] : [7]);
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            TokenBatcher.Tokenize(tokenizer, ["valid", privateText, "not reached"], false, CancellationToken.None));
+            tokenizer.CreateOnnxBatch(["valid", privateText, "not reached"], false, CancellationToken.None));
 
         Assert.Contains("257 tokens for sequence 1", exception.Message, StringComparison.Ordinal);
         Assert.Contains("maximum is 256", exception.Message, StringComparison.Ordinal);
@@ -132,11 +132,11 @@ public sealed class TokenBatcherTests
     }
 
     [Fact]
-    public void Tokenize_EmptyBatch_DoesNotInvokeTokenizer()
+    public void CreateOnnxBatch_EmptyBatch_DoesNotInvokeTokenizer()
     {
         using var tokenizer = new RecordingTokenizer(_ => [7]);
 
-        var batch = TokenBatcher.Tokenize(tokenizer, [], true, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch([], true, CancellationToken.None);
 
         Assert.Empty(batch.InputIds);
         Assert.Empty(batch.AttentionMask);
@@ -147,11 +147,11 @@ public sealed class TokenBatcherTests
     }
 
     [Fact]
-    public void Tokenize_EmptyEncodings_UsesOneMaskedPaddingPositionPerSequence()
+    public void CreateOnnxBatch_EmptyEncodings_UsesOneMaskedPaddingPositionPerSequence()
     {
         using var tokenizer = new RecordingTokenizer(_ => []);
 
-        var batch = TokenBatcher.Tokenize(tokenizer, [null!, ""], true, CancellationToken.None);
+        var batch = tokenizer.CreateOnnxBatch([null!, ""], true, CancellationToken.None);
 
         Assert.Equal(new long[] { 0, 0 }, batch.InputIds);
         Assert.Equal(new long[] { 0, 0 }, batch.AttentionMask);
@@ -164,21 +164,21 @@ public sealed class TokenBatcherTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Tokenize_CanceledBeforeWork_DoesNotInvokeTokenizer(bool emptyBatch)
+    public void CreateOnnxBatch_CanceledBeforeWork_DoesNotInvokeTokenizer(bool emptyBatch)
     {
         using var tokenizer = new RecordingTokenizer(_ => [7]);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
         var exception = Assert.Throws<OperationCanceledException>(() =>
-            TokenBatcher.Tokenize(tokenizer, emptyBatch ? [] : ["text"], false, cancellation.Token));
+            tokenizer.CreateOnnxBatch(emptyBatch ? [] : ["text"], false, cancellation.Token));
 
         Assert.Equal(cancellation.Token, exception.CancellationToken);
         Assert.Empty(tokenizer.Calls);
     }
 
     [Fact]
-    public void Tokenize_CanceledBetweenSequences_StopsBeforeNextEncoding()
+    public void CreateOnnxBatch_CanceledBetweenSequences_StopsBeforeNextEncoding()
     {
         using var cancellation = new CancellationTokenSource();
         using var tokenizer = new RecordingTokenizer(_ =>
@@ -188,20 +188,20 @@ public sealed class TokenBatcherTests
         });
 
         var exception = Assert.Throws<OperationCanceledException>(() =>
-            TokenBatcher.Tokenize(tokenizer, ["first", "second"], false, cancellation.Token));
+            tokenizer.CreateOnnxBatch(["first", "second"], false, cancellation.Token));
 
         Assert.Equal(cancellation.Token, exception.CancellationToken);
         Assert.Equal("first", Assert.Single(tokenizer.Calls).Text);
     }
 
     [Fact]
-    public void Tokenize_TokenizerFailure_PropagatesWithoutFallback()
+    public void CreateOnnxBatch_TokenizerFailure_PropagatesWithoutFallback()
     {
         var failure = new FormatException("Tokenizer failed.");
         using var tokenizer = new RecordingTokenizer(_ => throw failure);
 
         var exception = Assert.Throws<FormatException>(() =>
-            TokenBatcher.Tokenize(tokenizer, ["text"], false, CancellationToken.None));
+            tokenizer.CreateOnnxBatch(["text"], false, CancellationToken.None));
 
         Assert.Same(failure, exception);
         Assert.Single(tokenizer.Calls);

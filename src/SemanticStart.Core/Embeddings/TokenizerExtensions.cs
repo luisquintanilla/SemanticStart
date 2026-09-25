@@ -2,12 +2,12 @@ using Microsoft.ML.Tokenizers;
 
 namespace SemanticStart.Core.Embeddings;
 
-internal static class TokenBatcher
+internal static class TokenizerExtensions
 {
     private const int MaxSequenceLength = 256;
 
-    public static TokenizedBatch Tokenize(
-        Tokenizer tokenizer,
+    public static TokenizedBatch CreateOnnxBatch(
+        this Tokenizer tokenizer,
         IReadOnlyList<string> texts,
         bool includeTokenTypeIds,
         CancellationToken cancellationToken)
